@@ -12,7 +12,14 @@ import { useAppContext } from "@/context/AppContext";
 import { useSaveProfile } from "@/hooks/useQueries";
 import { useVoice } from "@/hooks/useVoice";
 import { useNavigate } from "@tanstack/react-router";
-import { Check, ChevronLeft, ChevronRight, Mic, MicOff } from "lucide-react";
+import {
+  Check,
+  ChevronLeft,
+  ChevronRight,
+  Mic,
+  MicOff,
+  SkipForward,
+} from "lucide-react";
 import { AnimatePresence, motion } from "motion/react";
 import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
@@ -32,6 +39,8 @@ interface Step {
   label: string;
   prompt: string;
   type: StepType;
+  optional?: boolean;
+  skipPrompt?: string;
   placeholder?: string;
   subFields?: Array<{
     key: string;
@@ -72,8 +81,11 @@ const STEPS: Step[] = [
   {
     key: "doctorContact",
     label: "Doctor Contact",
-    prompt: "Please provide your doctor's name and phone number.",
+    prompt:
+      "Do you have a personal doctor? If yes, please provide their name and phone number. If not, you can skip this step.",
     type: "dual",
+    optional: true,
+    skipPrompt: "No problem, skipping doctor contact.",
     subFields: [
       {
         key: "doctorName",
@@ -135,7 +147,6 @@ export function Register() {
     speak(currentStep.prompt);
     listen((text) => {
       if (currentStep.type === "dual" && currentStep.subFields) {
-        // Fill first sub-field with voice result
         setValues((prev) => ({
           ...prev,
           [currentStep.subFields![0].key]: text,
@@ -146,14 +157,39 @@ export function Register() {
     });
   };
 
+  const handleSkip = () => {
+    if (currentStep.skipPrompt) speak(currentStep.skipPrompt);
+    // Clear any partial values for skipped step
+    if (currentStep.subFields) {
+      setValues((prev) => {
+        const next = { ...prev };
+        for (const sf of currentStep.subFields!) {
+          delete next[sf.key];
+        }
+        return next;
+      });
+    }
+    if (step < STEPS.length - 1) {
+      setStep((s) => s + 1);
+    } else {
+      handleSave();
+    }
+  };
+
   const handleNext = () => {
     if (currentStep.type === "dual" && currentStep.subFields) {
       const allFilled = currentStep.subFields.every((sf) =>
         values[sf.key]?.trim(),
       );
-      if (!allFilled) {
+      if (!allFilled && !currentStep.optional) {
         speak("Please fill in both fields before continuing.");
         toast.error("Please fill in both fields");
+        return;
+      }
+      // If optional and partially filled, warn
+      if (!allFilled && currentStep.optional) {
+        speak("Please fill in both fields or skip this step.");
+        toast.error("Fill both fields or tap Skip");
         return;
       }
     } else {
@@ -236,9 +272,16 @@ export function Register() {
           className="flex-1 flex flex-col gap-6"
         >
           <div>
-            <h2 className="text-3xl font-bold text-foreground mb-1">
-              {currentStep.label}
-            </h2>
+            <div className="flex items-center gap-3 mb-1">
+              <h2 className="text-3xl font-bold text-foreground">
+                {currentStep.label}
+              </h2>
+              {currentStep.optional && (
+                <span className="text-sm font-medium px-2 py-0.5 rounded-full bg-muted text-muted-foreground">
+                  Optional
+                </span>
+              )}
+            </div>
             <p className="text-muted-foreground text-lg">
               {currentStep.prompt}
             </p>
@@ -365,38 +408,54 @@ export function Register() {
         </motion.div>
       </AnimatePresence>
 
-      <div className="flex gap-4 mt-8">
-        {step > 0 && (
+      <div className="flex flex-col gap-3 mt-8">
+        <div className="flex gap-4">
+          {step > 0 && (
+            <Button
+              variant="outline"
+              onClick={() => setStep((s) => s - 1)}
+              className="flex-1 btn-large"
+              aria-label="Go to previous step"
+              data-ocid="register.secondary_button"
+            >
+              <ChevronLeft className="w-5 h-5 mr-2" />
+              Back
+            </Button>
+          )}
           <Button
-            variant="outline"
-            onClick={() => setStep((s) => s - 1)}
-            className="flex-1 btn-large"
-            aria-label="Go to previous step"
-            data-ocid="register.secondary_button"
+            onClick={handleNext}
+            disabled={saveProfile.isPending}
+            className="flex-1 btn-large bg-primary text-primary-foreground hover:bg-primary/90"
+            aria-label={
+              step === STEPS.length - 1 ? "Save profile" : "Next step"
+            }
+            data-ocid="register.primary_button"
           >
-            <ChevronLeft className="w-5 h-5 mr-2" />
-            Back
+            {step === STEPS.length - 1 ? (
+              <>
+                <Check className="w-5 h-5 mr-2" />
+                Save Profile
+              </>
+            ) : (
+              <>
+                Next
+                <ChevronRight className="w-5 h-5 ml-2" />
+              </>
+            )}
+          </Button>
+        </div>
+        {currentStep.optional && (
+          <Button
+            variant="ghost"
+            onClick={handleSkip}
+            className="w-full h-14 rounded-xl text-muted-foreground text-lg border border-dashed border-muted-foreground/40 hover:text-foreground"
+            aria-label="Skip this optional step"
+            data-ocid="register.cancel_button"
+          >
+            <SkipForward className="w-5 h-5 mr-2" />I don't have a personal
+            doctor — Skip
           </Button>
         )}
-        <Button
-          onClick={handleNext}
-          disabled={saveProfile.isPending}
-          className="flex-1 btn-large bg-primary text-primary-foreground hover:bg-primary/90"
-          aria-label={step === STEPS.length - 1 ? "Save profile" : "Next step"}
-          data-ocid="register.primary_button"
-        >
-          {step === STEPS.length - 1 ? (
-            <>
-              <Check className="w-5 h-5 mr-2" />
-              Save Profile
-            </>
-          ) : (
-            <>
-              Next
-              <ChevronRight className="w-5 h-5 ml-2" />
-            </>
-          )}
-        </Button>
       </div>
     </div>
   );
