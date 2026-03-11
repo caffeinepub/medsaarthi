@@ -10,70 +10,73 @@ import type { ActorMethod } from '@icp-sdk/core/agent';
 import type { IDL } from '@icp-sdk/core/candid';
 import type { Principal } from '@icp-sdk/core/principal';
 
-export interface Alert {
-  'id' : AlertId,
-  'alertType' : AlertType,
-  'acknowledged' : boolean,
-  'message' : string,
+export interface AdherenceLog {
+  'takenAt' : Time,
+  'confirmed' : boolean,
+  'medicineId' : MedicineId,
+}
+export interface HealthCheckinResponse {
+  'date' : string,
+  'questionsAndAnswers' : Array<{ 'question' : string, 'answer' : string }>,
+  'session' : string,
   'timestamp' : Time,
 }
-export type AlertId = bigint;
-export type AlertType = { 'emergency' : null } |
-  { 'missedDose' : null } |
-  { 'healthUpdate' : null };
-export interface Contact { 'name' : string, 'phone' : Phone }
-export interface DoseLog {
-  'medicationId' : MedicationId,
-  'timestamp' : Time,
-  'confirmedByVoice' : boolean,
-}
-export interface HealthCheckIn {
-  'mood' : Mood,
-  'timestamp' : Time,
-  'sideEffects' : string,
-  'symptoms' : string,
-}
-export interface Medication {
-  'id' : MedicationId,
+export interface Medicine {
+  'id' : MedicineId,
   'dosage' : string,
+  'source' : string,
   'name' : string,
-  'notes' : string,
-  'scheduledTimes' : Array<string>,
-  'frequency' : bigint,
+  'time' : string,
+  'addedAt' : Time,
 }
-export type MedicationId = bigint;
-export type Mood = { 'fair' : null } |
-  { 'good' : null } |
-  { 'poor' : null };
-export type Phone = string;
-export interface Profile {
+export type MedicineId = bigint;
+export type PhoneNumber = string;
+export type Time = bigint;
+export interface UserProfile {
   'age' : bigint,
+  'weight' : bigint,
   'principal' : Principal,
   'preferredLanguage' : string,
-  'doctor' : Contact,
   'name' : string,
-  'caregiver' : Contact,
+  'medicalConditions' : Array<string>,
+  'doctorContact' : [] | [PhoneNumber],
+  'bloodGroup' : string,
+  'primaryCaregiverContact' : PhoneNumber,
+  'registrationComplete' : boolean,
+  'secondaryCaregiverContact' : [] | [PhoneNumber],
 }
-export type Time = bigint;
 export interface _SERVICE {
-  'acknowledgeAlert' : ActorMethod<[AlertId], undefined>,
-  'addMedication' : ActorMethod<
-    [string, string, bigint, Array<string>, string],
+  'addMedicine' : ActorMethod<[string, string, string, string], MedicineId>,
+  'createEmergencyAlert' : ActorMethod<[string], undefined>,
+  'deleteMedicine' : ActorMethod<[MedicineId], undefined>,
+  'getHealthCheckinsByDate' : ActorMethod<
+    [string],
+    [] | [HealthCheckinResponse]
+  >,
+  'getMedicinesByTime' : ActorMethod<[string], Array<Medicine>>,
+  'getMissedDoses' : ActorMethod<[], Array<Medicine>>,
+  'getTodaysAdherence' : ActorMethod<[], Array<AdherenceLog>>,
+  'getUserProfile' : ActorMethod<[], [] | [UserProfile]>,
+  'logAdherence' : ActorMethod<[MedicineId, boolean], undefined>,
+  'submitHealthCheckin' : ActorMethod<
+    [string, string, Array<{ 'question' : string, 'answer' : string }>],
     undefined
   >,
-  'createAlert' : ActorMethod<[AlertType, string, Time], undefined>,
-  'createOrUpdateProfile' : ActorMethod<
-    [string, bigint, string, Contact, Contact],
+  'updateUserProfile' : ActorMethod<
+    [
+      string,
+      bigint,
+      bigint,
+      string,
+      string,
+      Array<string>,
+      [] | [PhoneNumber],
+      PhoneNumber,
+      [] | [PhoneNumber],
+      boolean,
+    ],
     undefined
   >,
-  'deleteMedication' : ActorMethod<[MedicationId], undefined>,
-  'getDoseLogsForToday' : ActorMethod<[], Array<DoseLog>>,
-  'getProfile' : ActorMethod<[], Profile>,
-  'listAlerts' : ActorMethod<[], Array<Alert>>,
-  'listMedications' : ActorMethod<[], Array<Medication>>,
-  'listRecentCheckIns' : ActorMethod<[], Array<HealthCheckIn>>,
-  'logDose' : ActorMethod<[MedicationId, Time, boolean], undefined>,
-  'submitCheckIn' : ActorMethod<[string, string, Mood, Time], undefined>,
 }
 export declare const idlService: IDL.ServiceClass;
 export declare const idlInitArgs: IDL.Type[];

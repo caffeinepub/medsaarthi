@@ -1,102 +1,120 @@
 import { Layout } from "@/components/Layout";
 import { Button } from "@/components/ui/button";
-import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
-import { useSubmitCheckin } from "@/hooks/useQueries";
+import { Input } from "@/components/ui/input";
+import { useSubmitHealthCheckin } from "@/hooks/useQueries";
 import { useVoice } from "@/hooks/useVoice";
 import { useNavigate } from "@tanstack/react-router";
-import { ArrowLeft, CheckCircle, Heart, Mic, MicOff } from "lucide-react";
-import { motion } from "motion/react";
+import { ArrowLeft, CheckCircle, Mic, MicOff } from "lucide-react";
+import { AnimatePresence, motion } from "motion/react";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
 
-type MoodType = "good" | "fair" | "poor" | null;
+type Session = "Morning" | "Afternoon" | "Night";
 
-const MOODS = [
-  {
-    value: "good" as const,
-    emoji: "😊",
-    label: "Good",
-    color: "bg-secondary/20 text-secondary border-secondary/50",
-    activeColor: "bg-secondary text-secondary-foreground border-secondary",
-    ocid: "checkin.good_button",
-  },
-  {
-    value: "fair" as const,
-    emoji: "😐",
-    label: "Fair",
-    color: "bg-primary/20 text-primary border-primary/50",
-    activeColor: "bg-primary text-primary-foreground border-primary",
-    ocid: "checkin.fair_button",
-  },
-  {
-    value: "poor" as const,
-    emoji: "😔",
-    label: "Poor",
-    color: "bg-destructive/20 text-destructive border-destructive/50",
-    activeColor:
-      "bg-destructive text-destructive-foreground border-destructive",
-    ocid: "checkin.poor_button",
-  },
-];
+const QUESTIONS: Record<Session, string[]> = {
+  Morning: [
+    "Good morning. How are you feeling today?",
+    "Did you sleep well last night?",
+    "Do you feel any pain or discomfort in your body?",
+    "Do you have symptoms like cold, cough, fever, or headache today?",
+    "Are you feeling dizziness, weakness, or fatigue?",
+    "Did you take your morning medicines as prescribed?",
+    "Did you experience any side effects after yesterday's medicines?",
+    "What did you eat for breakfast today?",
+    "Have you had enough water this morning?",
+    "Do you feel better, worse, or the same compared to yesterday?",
+  ],
+  Afternoon: [
+    "How are you feeling right now?",
+    "Did you take your afternoon medicine on time?",
+    "Are you experiencing any new symptoms today?",
+    "Do you have cold, cough, throat irritation, or breathing difficulty?",
+    "Are you feeling nausea, stomach pain, or digestion problems?",
+    "What did you eat for lunch today?",
+    "Are you feeling tired, sleepy, or weak?",
+    "Have you had enough water during the day?",
+    "Did you notice any unusual reaction after your medicines?",
+    "How many tablets are left in your medicine strip?",
+  ],
+  Night: [
+    "How are you feeling tonight?",
+    "Did you take your night medicines as prescribed?",
+    "Did you experience any pain, fever, or discomfort during the day?",
+    "Are you feeling cold, cough, body ache, or throat irritation?",
+    "Did you feel any side effects after taking your medicines today?",
+    "What did you eat for dinner today?",
+    "Are you feeling better or worse compared to the morning?",
+    "Do you have any difficulty breathing, chest pain, or dizziness?",
+    "Do you want to report any health issue to your doctor?",
+    "Is there anything else you would like to tell about your health today?",
+  ],
+};
+
+function getSession(): Session {
+  const h = new Date().getHours();
+  if (h >= 18) return "Night";
+  if (h >= 12) return "Afternoon";
+  return "Morning";
+}
+
+function getTodayDate(): string {
+  return new Date().toISOString().slice(0, 10);
+}
 
 export function HealthCheckin() {
   const navigate = useNavigate();
   const { speak, listen, isListening } = useVoice();
-  const submitCheckin = useSubmitCheckin();
-  const [mood, setMood] = useState<MoodType>(null);
-  const [symptoms, setSymptoms] = useState("");
-  const [sideEffects, setSideEffects] = useState("");
-  const [listeningFor, setListeningFor] = useState<
-    "symptoms" | "sideEffects" | null
-  >(null);
+  const submitCheckin = useSubmitHealthCheckin();
+  const session = getSession();
+  const questions = QUESTIONS[session];
+
+  const [currentQ, setCurrentQ] = useState(0);
+  const [answers, setAnswers] = useState<string[]>(
+    Array(questions.length).fill(""),
+  );
   const [submitted, setSubmitted] = useState(false);
 
-  // biome-ignore lint/correctness/useExhaustiveDependencies: speak on mount
+  // biome-ignore lint/correctness/useExhaustiveDependencies: speak question on change
   useEffect(() => {
-    speak(
-      "How are you feeling today? Say good, fair, or poor, or tap one of the buttons.",
-    );
-  }, []);
+    speak(questions[currentQ]);
+  }, [currentQ]);
 
-  const handleMoodSelect = (m: MoodType) => {
-    setMood(m);
-    speak(
-      `You selected ${m}. Now, do you have any symptoms? Say them or tap the microphone.`,
-    );
+  const handleVoice = () => {
+    speak(questions[currentQ]);
+    listen((text) => {
+      setAnswers((prev) => {
+        const next = [...prev];
+        next[currentQ] = text;
+        return next;
+      });
+    });
   };
 
-  const handleVoiceListen = (field: "symptoms" | "sideEffects") => {
-    setListeningFor(field);
-    const prompt =
-      field === "symptoms"
-        ? "Please describe your symptoms."
-        : "Please describe any side effects.";
-    speak(prompt);
-    listen(
-      (text) => {
-        if (field === "symptoms") setSymptoms(text);
-        else setSideEffects(text);
-        setListeningFor(null);
-      },
-      () => setListeningFor(null),
-    );
+  const handleNext = () => {
+    if (currentQ < questions.length - 1) {
+      setCurrentQ((q) => q + 1);
+    } else {
+      handleSubmit();
+    }
   };
 
   const handleSubmit = async () => {
-    if (!mood) {
-      speak("Please select how you are feeling first.");
-      toast.error("Please select your mood");
-      return;
-    }
     try {
-      await submitCheckin.mutateAsync({ mood, symptoms, sideEffects });
+      const qas = questions.map((q, i) => ({
+        question: q,
+        answer: answers[i] || "No answer",
+      }));
+      await submitCheckin.mutateAsync({
+        session,
+        date: getTodayDate(),
+        questionsAndAnswers: qas,
+      });
       setSubmitted(true);
       speak("Health check-in submitted. Thank you for the update.");
       toast.success("Health check-in recorded!");
-      setTimeout(() => navigate({ to: "/home" }), 2000);
+      setTimeout(() => navigate({ to: "/home" }), 2500);
     } catch {
-      toast.error("Failed to submit check-in");
+      toast.error("Failed to submit");
     }
   };
 
@@ -109,10 +127,8 @@ export function HealthCheckin() {
             animate={{ scale: 1 }}
             className="text-center space-y-4"
           >
-            <CheckCircle className="w-24 h-24 text-secondary mx-auto" />
-            <h2 className="text-3xl font-black text-foreground">
-              Check-in Submitted!
-            </h2>
+            <CheckCircle className="w-24 h-24 text-green-500 mx-auto" />
+            <h2 className="text-3xl font-black">Check-in Submitted!</h2>
             <p className="text-muted-foreground text-xl">
               Thank you for your health update.
             </p>
@@ -125,105 +141,107 @@ export function HealthCheckin() {
   return (
     <Layout>
       <div className="page-container pt-8">
-        <div className="flex items-center gap-4 pt-14 mb-6">
+        <div className="flex items-center gap-4 pt-14 mb-4">
           <Button
             variant="ghost"
             size="icon"
             onClick={() => navigate({ to: "/home" })}
             aria-label="Go back"
+            data-ocid="checkin.cancel_button"
           >
             <ArrowLeft className="w-6 h-6" />
           </Button>
-          <h1 className="text-3xl font-black">Health Check-in</h1>
+          <div>
+            <h1 className="text-2xl font-black">{session} Check-in</h1>
+            <p className="text-muted-foreground text-sm">
+              Question {currentQ + 1} of {questions.length}
+            </p>
+          </div>
         </div>
 
-        <section className="mb-8">
-          <h2 className="text-xl font-bold mb-4 text-muted-foreground">
-            How are you feeling?
-          </h2>
-          <div className="grid grid-cols-3 gap-4">
-            {MOODS.map((m) => (
-              <motion.button
-                key={m.value}
-                whileTap={{ scale: 0.95 }}
-                onClick={() => handleMoodSelect(m.value)}
-                className={`flex flex-col items-center gap-2 p-5 rounded-2xl border-2 transition-colors focus-ring ${
-                  mood === m.value ? m.activeColor : m.color
-                }`}
-                aria-label={`Feeling ${m.label}`}
-                aria-pressed={mood === m.value}
-                data-ocid={m.ocid}
+        <div className="h-2 bg-muted rounded-full mb-6 overflow-hidden">
+          <motion.div
+            className="h-full bg-primary rounded-full"
+            animate={{ width: `${((currentQ + 1) / questions.length) * 100}%` }}
+            transition={{ duration: 0.3 }}
+          />
+        </div>
+
+        <AnimatePresence mode="wait">
+          <motion.div
+            key={currentQ}
+            initial={{ opacity: 0, x: 40 }}
+            animate={{ opacity: 1, x: 0 }}
+            exit={{ opacity: 0, x: -40 }}
+            transition={{ duration: 0.25 }}
+            className="space-y-6"
+          >
+            <div className="p-6 rounded-2xl bg-card border border-border">
+              <p className="text-xl font-bold text-foreground leading-relaxed">
+                {questions[currentQ]}
+              </p>
+            </div>
+
+            <div className="flex gap-3">
+              <Input
+                value={answers[currentQ]}
+                onChange={(e) =>
+                  setAnswers((prev) => {
+                    const n = [...prev];
+                    n[currentQ] = e.target.value;
+                    return n;
+                  })
+                }
+                placeholder="Type your answer or use voice..."
+                className="flex-1 h-16 text-lg"
+                aria-label="Your answer"
+                data-ocid="checkin.input"
+              />
+              <Button
+                variant="outline"
+                onClick={handleVoice}
+                className="w-16 h-16 rounded-xl flex-shrink-0"
+                aria-label={isListening ? "Stop" : "Speak answer"}
+                data-ocid="checkin.toggle"
               >
-                <span className="text-4xl">{m.emoji}</span>
-                <span className="font-bold text-base">{m.label}</span>
-              </motion.button>
-            ))}
-          </div>
-        </section>
+                {isListening ? (
+                  <MicOff className="w-6 h-6 text-destructive" />
+                ) : (
+                  <Mic className="w-6 h-6 text-primary" />
+                )}
+              </Button>
+            </div>
 
-        <section className="mb-6">
-          <div className="flex items-center justify-between mb-3">
-            <Label className="text-xl font-bold">Symptoms</Label>
-            <Button
-              variant="outline"
-              size="icon"
-              onClick={() => handleVoiceListen("symptoms")}
-              className="w-12 h-12 rounded-xl"
-              aria-label="Record symptoms by voice"
-            >
-              {listeningFor === "symptoms" ? (
-                <MicOff className="w-5 h-5 text-destructive" />
-              ) : (
-                <Mic className="w-5 h-5 text-primary" />
-              )}
-            </Button>
-          </div>
-          <Textarea
-            value={symptoms}
-            onChange={(e) => setSymptoms(e.target.value)}
-            placeholder="e.g. headache, dizziness... or tap mic to speak"
-            className="min-h-[100px] text-lg"
-            aria-label="Describe your symptoms"
-            data-ocid="checkin.symptoms_input"
-          />
-        </section>
+            {isListening && (
+              <div className="flex items-center gap-3 p-4 bg-primary/10 rounded-xl border border-primary/30">
+                <div className="w-4 h-4 rounded-full bg-primary animate-pulse" />
+                <p className="text-primary font-medium text-lg">
+                  Listening... Speak now
+                </p>
+              </div>
+            )}
+          </motion.div>
+        </AnimatePresence>
 
-        <section className="mb-8">
-          <div className="flex items-center justify-between mb-3">
-            <Label className="text-xl font-bold">Side Effects</Label>
-            <Button
-              variant="outline"
-              size="icon"
-              onClick={() => handleVoiceListen("sideEffects")}
-              className="w-12 h-12 rounded-xl"
-              aria-label="Record side effects by voice"
-            >
-              {listeningFor === "sideEffects" || isListening ? (
-                <MicOff className="w-5 h-5 text-destructive" />
-              ) : (
-                <Mic className="w-5 h-5 text-primary" />
-              )}
-            </Button>
-          </div>
-          <Textarea
-            value={sideEffects}
-            onChange={(e) => setSideEffects(e.target.value)}
-            placeholder="e.g. nausea, stomach upset... or tap mic to speak"
-            className="min-h-[100px] text-lg"
-            aria-label="Describe any side effects"
-          />
-        </section>
-
-        <Button
-          onClick={handleSubmit}
-          disabled={submitCheckin.isPending}
-          className="w-full btn-xl bg-primary text-primary-foreground shadow-card"
-          aria-label="Submit health check-in"
-          data-ocid="checkin.submit_button"
-        >
-          <Heart className="w-6 h-6 mr-2" />
-          {submitCheckin.isPending ? "Submitting..." : "Submit Check-in"}
-        </Button>
+        <div className="mt-8">
+          <Button
+            onClick={handleNext}
+            disabled={submitCheckin.isPending}
+            className="w-full h-16 rounded-xl text-xl font-bold bg-primary text-primary-foreground"
+            aria-label={
+              currentQ === questions.length - 1
+                ? "Submit check-in"
+                : "Next question"
+            }
+            data-ocid="checkin.primary_button"
+          >
+            {currentQ === questions.length - 1
+              ? submitCheckin.isPending
+                ? "Submitting..."
+                : "Submit Check-in"
+              : "Next Question"}
+          </Button>
+        </div>
       </div>
     </Layout>
   );

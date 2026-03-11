@@ -1,7 +1,7 @@
 import { useCamera } from "@/camera/useCamera";
 import { Layout } from "@/components/Layout";
 import { Button } from "@/components/ui/button";
-import { useLogDose, useMedications } from "@/hooks/useQueries";
+import { useAllMedicines, useLogAdherence } from "@/hooks/useQueries";
 import { useVoice } from "@/hooks/useVoice";
 import { useNavigate } from "@tanstack/react-router";
 import {
@@ -27,18 +27,18 @@ export function VerifyMedicine() {
     stopCamera,
     capturePhoto,
   } = useCamera();
-  const { data: medications = [] } = useMedications();
-  const logDose = useLogDose();
+  const { data: medicines = [] } = useAllMedicines();
+  const logAdherence = useLogAdherence();
   const [scanned, setScanned] = useState(false);
   const [marked, setMarked] = useState(false);
   const [isWrongMedicine, setIsWrongMedicine] = useState(false);
 
-  const matchedMed = medications[0];
+  const matchedMed = medicines[0];
 
-  // biome-ignore lint/correctness/useExhaustiveDependencies: run once on mount
+  // biome-ignore lint/correctness/useExhaustiveDependencies: run once
   useEffect(() => {
     speak(
-      "Verify Medicine. Hold the medicine strip clearly in front of the camera and tap Scan.",
+      "Verify Medicine. Hold the medicine strip in front of the camera and tap Scan.",
     );
     startCamera();
     return () => {
@@ -51,17 +51,13 @@ export function VerifyMedicine() {
     const wrong = Math.random() < 0.3;
     setIsWrongMedicine(wrong);
     setScanned(true);
-
     if (wrong) {
       speak(
         "Warning. Wrong medicine detected. Please check your prescription.",
       );
     } else {
       const medName = matchedMed?.name || "Paracetamol 500mg";
-      const time = matchedMed?.scheduledTimes[0] || "8:00 AM";
-      speak(
-        `Correct medicine identified: ${medName}. This matches your ${time} dose. It is safe to take.`,
-      );
+      speak(`Correct medicine identified: ${medName}. It is safe to take.`);
     }
   };
 
@@ -78,9 +74,9 @@ export function VerifyMedicine() {
       return;
     }
     try {
-      await logDose.mutateAsync({
-        medicationId: matchedMed.id,
-        confirmedByVoice: false,
+      await logAdherence.mutateAsync({
+        medicineId: matchedMed.id,
+        confirmed: true,
       });
       setMarked(true);
       speak("Dose marked as taken. Well done!");
@@ -116,10 +112,9 @@ export function VerifyMedicine() {
             >
               <div className="p-4 bg-secondary/10 border border-secondary/30 rounded-2xl mb-6">
                 <p className="text-secondary text-lg font-medium text-center">
-                  Hold the medicine strip clearly in front of the camera
+                  Hold the medicine strip in front of the camera
                 </p>
               </div>
-
               <div className="relative aspect-video bg-muted rounded-2xl overflow-hidden mb-6">
                 {isLoading && (
                   <div
@@ -140,16 +135,14 @@ export function VerifyMedicine() {
                 />
                 <canvas ref={canvasRef} className="hidden" />
               </div>
-
               <Button
                 onClick={handleScan}
                 disabled={!isActive}
-                className="w-full btn-xl bg-secondary text-secondary-foreground text-xl font-bold py-6"
-                aria-label="Scan medicine to verify"
+                className="w-full h-16 rounded-xl text-xl font-bold bg-secondary text-secondary-foreground"
+                aria-label="Scan medicine"
                 data-ocid="verify.upload_button"
               >
-                <Camera className="w-6 h-6 mr-3" />
-                Scan Medicine
+                <Camera className="w-6 h-6 mr-3" /> Scan Medicine
               </Button>
             </motion.div>
           ) : isWrongMedicine ? (
@@ -157,18 +150,12 @@ export function VerifyMedicine() {
               key="wrong"
               initial={{ opacity: 0, scale: 0.9 }}
               animate={{ opacity: 1, scale: 1 }}
-              transition={{ duration: 0.4 }}
               data-ocid="verify.error_state"
             >
               <div className="flex flex-col items-center gap-6 py-8">
-                <motion.div
-                  animate={{ scale: [1, 1.1, 1] }}
-                  transition={{ repeat: 3, duration: 0.5 }}
-                  className="w-28 h-28 rounded-full bg-destructive/20 flex items-center justify-center"
-                >
+                <div className="w-28 h-28 rounded-full bg-destructive/20 flex items-center justify-center">
                   <AlertTriangle className="w-16 h-16 text-destructive" />
-                </motion.div>
-
+                </div>
                 <div className="text-center">
                   <h2 className="text-3xl font-black text-destructive mb-2">
                     ⚠ Wrong Medicine Detected
@@ -176,19 +163,13 @@ export function VerifyMedicine() {
                   <p className="text-muted-foreground text-lg">
                     This medicine does not match your prescription.
                   </p>
-                  <p className="text-destructive font-semibold text-xl mt-2">
-                    Please check your prescription and try again.
-                  </p>
                 </div>
-
                 <Button
                   onClick={handleScanAgain}
-                  className="w-full btn-xl bg-destructive/20 border-2 border-destructive text-destructive hover:bg-destructive/30 text-xl font-bold py-6"
-                  aria-label="Scan again — try another medicine"
+                  className="w-full h-16 rounded-xl text-xl font-bold bg-destructive/20 border-2 border-destructive text-destructive"
                   data-ocid="verify.secondary_button"
                 >
-                  <RotateCcw className="w-6 h-6 mr-3" />
-                  Scan Again
+                  <RotateCcw className="w-6 h-6 mr-3" /> Scan Again
                 </Button>
               </div>
             </motion.div>
@@ -197,7 +178,6 @@ export function VerifyMedicine() {
               key="result"
               initial={{ opacity: 0, scale: 0.9 }}
               animate={{ opacity: 1, scale: 1 }}
-              transition={{ duration: 0.4 }}
               data-ocid="verify.success_state"
             >
               <div className="flex flex-col items-center gap-6 py-8">
@@ -209,25 +189,21 @@ export function VerifyMedicine() {
                 >
                   <CheckCircle className="w-16 h-16 text-green-500" />
                 </motion.div>
-
                 <div className="text-center">
                   <h2 className="text-3xl font-black text-green-500 mb-2">
                     ✔ Correct Medicine
                   </h2>
-                  <p className="text-xl font-semibold text-foreground">
+                  <p className="text-xl font-semibold">
                     {matchedMed?.name || "Paracetamol 500mg"}
                   </p>
                   <p className="text-muted-foreground text-lg">
-                    Matches your {matchedMed?.scheduledTimes[0] || "8:00 AM"}{" "}
-                    dose
+                    {matchedMed?.time || "Morning"} dose
                   </p>
                 </div>
-
                 {!marked ? (
                   <Button
                     onClick={handleMarkTaken}
-                    className="w-full btn-xl bg-green-600 hover:bg-green-500 text-white text-xl font-bold py-6"
-                    aria-label="Mark dose as taken"
+                    className="w-full h-16 rounded-xl text-xl font-bold bg-green-600 hover:bg-green-500 text-white"
                     data-ocid="verify.confirm_button"
                   >
                     ✅ Mark as Taken
@@ -240,16 +216,13 @@ export function VerifyMedicine() {
                     </p>
                   </div>
                 )}
-
                 <Button
                   variant="outline"
                   onClick={handleScanAgain}
                   className="w-full h-14"
-                  aria-label="Scan another medicine"
                   data-ocid="verify.secondary_button"
                 >
-                  <RotateCcw className="w-5 h-5 mr-2" />
-                  Scan Another
+                  <RotateCcw className="w-5 h-5 mr-2" /> Scan Another
                 </Button>
               </div>
             </motion.div>

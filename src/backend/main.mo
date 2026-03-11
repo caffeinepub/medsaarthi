@@ -1,268 +1,247 @@
 import Map "mo:core/Map";
-import Array "mo:core/Array";
 import Iter "mo:core/Iter";
-import Text "mo:core/Text";
-import Order "mo:core/Order";
-import Principal "mo:core/Principal";
+import Array "mo:core/Array";
 import Runtime "mo:core/Runtime";
+import Principal "mo:core/Principal";
 import Time "mo:core/Time";
 
+
+
 actor {
-  type Phone = Text;
+  type PhoneNumber = Text;
 
-  type Contact = {
-    name : Text;
-    phone : Phone;
-  };
-
-  type Profile = {
+  type UserProfile = {
     principal : Principal;
     name : Text;
     age : Nat;
+    weight : Nat;
+    bloodGroup : Text;
     preferredLanguage : Text;
-    doctor : Contact;
-    caregiver : Contact;
+    medicalConditions : [Text];
+    doctorContact : ?PhoneNumber;
+    primaryCaregiverContact : PhoneNumber;
+    secondaryCaregiverContact : ?PhoneNumber;
+    registrationComplete : Bool;
   };
 
-  type MedicationId = Nat;
+  type MedicineId = Nat;
 
-  type Medication = {
-    id : MedicationId;
+  type Medicine = {
+    id : MedicineId;
     name : Text;
     dosage : Text;
-    frequency : Nat;
-    scheduledTimes : [Text];
-    notes : Text;
+    time : Text; // "Morning", "Afternoon", "Night"
+    addedAt : Time.Time;
+    source : Text; // "manual" or "scan"
   };
 
-  type DoseLog = {
-    medicationId : MedicationId;
-    timestamp : Time.Time;
-    confirmedByVoice : Bool;
+  type AdherenceLog = {
+    medicineId : MedicineId;
+    takenAt : Time.Time;
+    confirmed : Bool;
   };
 
-  type AlertType = {
-    #missedDose;
-    #emergency;
-    #healthUpdate;
-  };
-
-  type AlertId = Nat;
-
-  type Alert = {
-    id : AlertId;
-    alertType : AlertType;
-    message : Text;
-    timestamp : Time.Time;
-    acknowledged : Bool;
-  };
-
-  type Mood = {
-    #good;
-    #fair;
-    #poor;
-  };
-
-  type HealthCheckIn = {
-    symptoms : Text;
-    sideEffects : Text;
-    mood : Mood;
+  type HealthCheckinResponse = {
+    session : Text; // "Morning", "Afternoon", "Night"
+    date : Text;
+    questionsAndAnswers : [{ question : Text; answer : Text }];
     timestamp : Time.Time;
   };
 
-  module Profile {
-    public func compare(profile1 : Profile, profile2 : Profile) : Order.Order {
-      Principal.compare(profile1.principal, profile2.principal);
-    };
+  type EmergencyAlert = {
+    timestamp : Time.Time;
+    caregiverNotified : Bool;
+    note : Text;
   };
 
-  module Medication {
-    public func compare(med1 : Medication, med2 : Medication) : Order.Order {
-      Text.compare(med1.name, med2.name);
-    };
-  };
+  let userProfiles = Map.empty<Principal, UserProfile>();
+  let medicines = Map.empty<Principal, Map.Map<MedicineId, Medicine>>();
+  let adherenceLogs = Map.empty<Principal, Map.Map<MedicineId, Map.Map<Time.Time, AdherenceLog>>>();
+  let healthCheckins = Map.empty<Principal, Map.Map<Text, HealthCheckinResponse>>(); // Keyed by date
+  let emergencyAlerts = Map.empty<Principal, EmergencyAlert>();
 
-  let profiles = Map.empty<Principal, Profile>();
-  let medications = Map.empty<Principal, Map.Map<MedicationId, Medication>>();
-  let doseLogs = Map.empty<Principal, Map.Map<Time.Time, DoseLog>>();
-  let alerts = Map.empty<Principal, Map.Map<AlertId, Alert>>();
-  let healthCheckIns = Map.empty<Principal, Map.Map<Time.Time, HealthCheckIn>>();
+  var nextMedicineId = 0;
 
-  var nextMedicationId = 0;
-  var nextAlertId = 0;
-
-  // User Profile
-  public shared ({ caller }) func createOrUpdateProfile(name : Text, age : Nat, preferredLanguage : Text, doctor : Contact, caregiver : Contact) : async () {
-    let newProfile : Profile = {
+  /////////////////////////////
+  // User Profile Methods
+  /////////////////////////////
+  public shared ({ caller }) func updateUserProfile(
+    name : Text,
+    age : Nat,
+    weight : Nat,
+    bloodGroup : Text,
+    preferredLanguage : Text,
+    medicalConditions : [Text],
+    doctorContact : ?PhoneNumber,
+    primaryCaregiverContact : PhoneNumber,
+    secondaryCaregiverContact : ?PhoneNumber,
+    registrationComplete : Bool,
+  ) : async () {
+    let newProfile : UserProfile = {
       principal = caller;
       name;
       age;
+      weight;
+      bloodGroup;
       preferredLanguage;
-      doctor;
-      caregiver;
+      medicalConditions;
+      doctorContact;
+      primaryCaregiverContact;
+      secondaryCaregiverContact;
+      registrationComplete;
     };
-    profiles.add(caller, newProfile);
+    userProfiles.add(caller, newProfile);
   };
 
-  public query ({ caller }) func getProfile() : async Profile {
-    switch (profiles.get(caller)) {
-      case (null) { Runtime.trap("No profile found for user: " # caller.toText()) };
-      case (?profile) { profile };
-    };
+  public query ({ caller }) func getUserProfile() : async ?UserProfile {
+    userProfiles.get(caller);
   };
 
-  // Medications
-  public shared ({ caller }) func addMedication(name : Text, dosage : Text, frequency : Nat, scheduledTimes : [Text], notes : Text) : async () {
-    let medication : Medication = {
-      id = nextMedicationId;
+  /////////////////////////////
+  // Medicine Management
+  /////////////////////////////
+  public shared ({ caller }) func addMedicine(
+    name : Text,
+    dosage : Text,
+    time : Text,
+    source : Text,
+  ) : async MedicineId {
+    let medicine : Medicine = {
+      id = nextMedicineId;
       name;
       dosage;
-      frequency;
-      scheduledTimes;
-      notes;
+      time;
+      addedAt = Time.now();
+      source;
     };
-    let userMedications = switch (medications.get(caller)) {
-      case (null) {
-        Map.empty<MedicationId, Medication>();
-      };
-      case (?existing) {
-        existing;
-      };
+
+    let userMedicines = switch (medicines.get(caller)) {
+      case (null) { Map.empty<MedicineId, Medicine>() };
+      case (?existing) { existing };
     };
-    userMedications.add(nextMedicationId, medication);
-    medications.add(caller, userMedications);
-    nextMedicationId += 1;
+
+    userMedicines.add(nextMedicineId, medicine);
+    medicines.add(caller, userMedicines);
+
+    nextMedicineId += 1;
+    nextMedicineId - 1;
   };
 
-  public query ({ caller }) func listMedications() : async [Medication] {
-    switch (medications.get(caller)) {
+  public query ({ caller }) func getMedicinesByTime(timeOfDay : Text) : async [Medicine] {
+    switch (medicines.get(caller)) {
       case (null) { [] };
-      case (?userMedications) {
-        userMedications.values().toArray().sort();
+      case (?userMedicines) {
+        userMedicines.values().toArray().filter(func(m) { m.time == timeOfDay });
       };
     };
   };
 
-  public shared ({ caller }) func deleteMedication(medicationId : MedicationId) : async () {
-    switch (medications.get(caller)) {
-      case (null) { Runtime.trap("No medications found for user: " # caller.toText()) };
-      case (?userMedications) {
-        switch (userMedications.get(medicationId)) {
-          case (null) { Runtime.trap("Medication not found: " # medicationId.toText()) };
+  public shared ({ caller }) func deleteMedicine(medicineId : MedicineId) : async () {
+    switch (medicines.get(caller)) {
+      case (null) { Runtime.trap("No medicines found for user"); };
+      case (?userMedicines) {
+        switch (userMedicines.get(medicineId)) {
+          case (null) { Runtime.trap("Medicine not found"); };
           case (_) {
-            userMedications.remove(medicationId);
+            userMedicines.remove(medicineId);
           };
         };
       };
     };
   };
 
-  // Dose Logs
-  public shared ({ caller }) func logDose(medicationId : MedicationId, timestamp : Time.Time, confirmedByVoice : Bool) : async () {
-    let doseLog : DoseLog = {
-      medicationId;
-      timestamp;
-      confirmedByVoice;
+  /////////////////////////////
+  // Adherence Logging
+  /////////////////////////////
+  public shared ({ caller }) func logAdherence(medicineId : MedicineId, confirmed : Bool) : async () {
+    let log : AdherenceLog = {
+      medicineId;
+      takenAt = Time.now();
+      confirmed;
     };
 
-    let userLogs = switch (doseLogs.get(caller)) {
-      case (null) {
-        Map.empty<Time.Time, DoseLog>();
-      };
-      case (?existing) {
-        existing;
-      };
+    let medicineLogs = switch (adherenceLogs.get(caller)) {
+      case (null) { Map.empty<MedicineId, Map.Map<Time.Time, AdherenceLog>>() };
+      case (?existing) { existing };
     };
 
-    userLogs.add(timestamp, doseLog);
-    doseLogs.add(caller, userLogs);
+    let dailyLogs = switch (medicineLogs.get(medicineId)) {
+      case (null) { Map.empty<Time.Time, AdherenceLog>() };
+      case (?existing) { existing };
+    };
+
+    dailyLogs.add(Time.now(), log);
+    medicineLogs.add(medicineId, dailyLogs);
+    adherenceLogs.add(caller, medicineLogs);
   };
 
-  public query ({ caller }) func getDoseLogsForToday() : async [DoseLog] {
-    switch (doseLogs.get(caller)) {
+  public query ({ caller }) func getTodaysAdherence() : async [AdherenceLog] {
+    switch (adherenceLogs.get(caller)) {
       case (null) { [] };
-      case (?userLogs) {
-        userLogs.values().toArray();
+      case (?medicineLogs) {
+        let allLogs = medicineLogs.toArray();
+        if (allLogs.size() > 0) {
+          let firstEntry = allLogs[0];
+          let dailyLogs = firstEntry.1;
+          dailyLogs.values().toArray();
+        } else { [] };
       };
     };
   };
 
-  // Caregiver Alerts
-  public shared ({ caller }) func createAlert(alertType : AlertType, message : Text, timestamp : Time.Time) : async () {
-    let alert : Alert = {
-      id = nextAlertId;
-      alertType;
-      message;
-      timestamp;
-      acknowledged = false;
+  /////////////////////////////
+  // Health Check-In
+  /////////////////////////////
+  public shared ({ caller }) func submitHealthCheckin(
+    session : Text,
+    date : Text,
+    questionsAndAnswers : [{ question : Text; answer : Text }],
+  ) : async () {
+    let response : HealthCheckinResponse = {
+      session;
+      date;
+      questionsAndAnswers;
+      timestamp = Time.now();
     };
 
-    let userAlerts = switch (alerts.get(caller)) {
-      case (null) {
-        Map.empty<AlertId, Alert>();
-      };
-      case (?existing) {
-        existing;
-      };
+    let userCheckins = switch (healthCheckins.get(caller)) {
+      case (null) { Map.empty<Text, HealthCheckinResponse>() };
+      case (?existing) { existing };
     };
 
-    userAlerts.add(nextAlertId, alert);
-    alerts.add(caller, userAlerts);
-    nextAlertId += 1;
+    userCheckins.add(date, response);
+    healthCheckins.add(caller, userCheckins);
   };
 
-  public query ({ caller }) func listAlerts() : async [Alert] {
-    switch (alerts.get(caller)) {
+  public query ({ caller }) func getHealthCheckinsByDate(date : Text) : async ?HealthCheckinResponse {
+    switch (healthCheckins.get(caller)) {
+      case (null) { null };
+      case (?userCheckins) { userCheckins.get(date) };
+    };
+  };
+
+  /////////////////////////////
+  // Emergency Alerts
+  /////////////////////////////
+  public shared ({ caller }) func createEmergencyAlert(note : Text) : async () {
+    let alert : EmergencyAlert = {
+      timestamp = Time.now();
+      caregiverNotified = false;
+      note;
+    };
+    emergencyAlerts.add(caller, alert);
+  };
+
+  /////////////////////////////
+  // Helper Methods
+  /////////////////////////////
+  public query ({ caller }) func getMissedDoses() : async [Medicine] {
+    let missingDoses : [Medicine] = switch (medicines.get(caller)) {
       case (null) { [] };
-      case (?userAlerts) {
-        userAlerts.values().toArray();
+      case (?userMedicines) {
+        userMedicines.values().toArray().filter(func(m) { true });
       };
     };
-  };
-
-  public shared ({ caller }) func acknowledgeAlert(alertId : AlertId) : async () {
-    switch (alerts.get(caller)) {
-      case (null) { Runtime.trap("No alerts found for user: " # caller.toText()) };
-      case (?userAlerts) {
-        switch (userAlerts.get(alertId)) {
-          case (null) { Runtime.trap("Alert not found: " # alertId.toText()) };
-          case (?alert) {
-            let updatedAlert : Alert = { alert with acknowledged = true };
-            userAlerts.add(alertId, updatedAlert);
-          };
-        };
-      };
-    };
-  };
-
-  // Health Check-Ins
-  public shared ({ caller }) func submitCheckIn(symptoms : Text, sideEffects : Text, mood : Mood, timestamp : Time.Time) : async () {
-    let checkIn : HealthCheckIn = {
-      symptoms;
-      sideEffects;
-      mood;
-      timestamp;
-    };
-
-    let userCheckIns = switch (healthCheckIns.get(caller)) {
-      case (null) {
-        Map.empty<Time.Time, HealthCheckIn>();
-      };
-      case (?existing) {
-        existing;
-      };
-    };
-
-    userCheckIns.add(timestamp, checkIn);
-    healthCheckIns.add(caller, userCheckIns);
-  };
-
-  public query ({ caller }) func listRecentCheckIns() : async [HealthCheckIn] {
-    switch (healthCheckIns.get(caller)) {
-      case (null) { [] };
-      case (?userCheckIns) {
-        userCheckIns.values().toArray();
-      };
-    };
+    missingDoses;
   };
 };

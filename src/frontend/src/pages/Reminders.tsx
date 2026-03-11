@@ -2,10 +2,11 @@ import { Layout } from "@/components/Layout";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
-  useDoseLogsToday,
-  useLogDose,
-  useMedications,
+  useAllMedicines,
+  useLogAdherence,
+  useTodaysAdherence,
 } from "@/hooks/useQueries";
+import { useReminders } from "@/hooks/useReminders";
 import { useVoice } from "@/hooks/useVoice";
 import {
   Bell,
@@ -20,34 +21,25 @@ import { motion } from "motion/react";
 import { useEffect } from "react";
 import { toast } from "sonner";
 
-function getTimeGroup(timeStr: string): "morning" | "afternoon" | "night" {
-  const [h] = timeStr.split(":").map(Number);
-  if (h < 12) return "morning";
-  if (h < 17) return "afternoon";
-  return "night";
-}
+type TOD = "Morning" | "Afternoon" | "Night";
 
-function formatTime12h(timeStr: string): string {
-  const [h, m] = timeStr.split(":").map(Number);
-  const ampm = h >= 12 ? "PM" : "AM";
-  const hour = h % 12 || 12;
-  return `${hour}:${String(m).padStart(2, "0")} ${ampm}`;
-}
-
-const GROUP_CONFIG = {
-  morning: {
+const GROUP_CONFIG: Record<
+  TOD,
+  { label: string; icon: typeof Sun; color: string; bg: string }
+> = {
+  Morning: {
     label: "Morning",
     icon: Sun,
     color: "text-yellow-400",
     bg: "bg-yellow-400/10",
   },
-  afternoon: {
+  Afternoon: {
     label: "Afternoon",
     icon: Sunset,
     color: "text-orange-400",
     bg: "bg-orange-400/10",
   },
-  night: {
+  Night: {
     label: "Night",
     icon: Moon,
     color: "text-indigo-400",
@@ -57,66 +49,51 @@ const GROUP_CONFIG = {
 
 export function Reminders() {
   const { speak } = useVoice();
-  const { data: medications = [], isLoading } = useMedications();
-  const { data: doseLogs = [] } = useDoseLogsToday();
-  const logDose = useLogDose();
+  const { data: medicines = [], isLoading } = useAllMedicines();
+  const { data: adherence = [] } = useTodaysAdherence();
+  const logAdherence = useLogAdherence();
 
-  type DoseEntry = {
-    med: any;
-    time: string;
-    group: "morning" | "afternoon" | "night";
-    taken: boolean;
-  };
+  const takenIds = new Set(adherence.map((a) => String(a.medicineId)));
 
-  const todayDoses: DoseEntry[] = [];
-  for (const med of medications) {
-    for (const time of med.scheduledTimes) {
-      const taken = doseLogs.some((l: any) => l.medicationId === med.id);
-      todayDoses.push({ med, time, group: getTimeGroup(time), taken });
-    }
-  }
-  todayDoses.sort((a, b) => a.time.localeCompare(b.time));
+  useReminders(medicines, (med) => {
+    toast(`Time to take ${med.name}!`, { duration: 10000 });
+  });
 
-  const grouped = {
-    morning: todayDoses.filter((d) => d.group === "morning"),
-    afternoon: todayDoses.filter((d) => d.group === "afternoon"),
-    night: todayDoses.filter((d) => d.group === "night"),
-  };
-
-  // biome-ignore lint/correctness/useExhaustiveDependencies: speak on data load
+  // biome-ignore lint/correctness/useExhaustiveDependencies: speak on load
   useEffect(() => {
-    const upcoming = todayDoses.filter((d) => !d.taken).length;
-    speak(
-      `Reminders. You have ${upcoming} pending doses today. It is time to take your medicine.`,
-    );
-  }, [medications.length]);
+    const pending = medicines.filter((m) => !takenIds.has(String(m.id))).length;
+    speak(`Reminders. You have ${pending} pending doses today.`);
+  }, [medicines.length]);
 
-  const handleMarkTaken = async (med: any, _time: string) => {
+  const handleMarkTaken = async (id: bigint, name: string) => {
     try {
-      await logDose.mutateAsync({
-        medicationId: med.id,
-        confirmedByVoice: false,
-      });
-      speak(
-        `${med.name} marked as taken. Thank you. Your medicine has been recorded.`,
-      );
-      toast.success(`${med.name} marked as taken`);
+      await logAdherence.mutateAsync({ medicineId: id, confirmed: true });
+      speak(`${name} marked as taken. Thank you.`);
+      toast.success(`${name} marked as taken`);
     } catch {
       toast.error("Failed to log dose");
     }
   };
 
-  const handleConfirmMostRecent = () => {
-    const pending = todayDoses.filter((d) => !d.taken);
+  const handleConfirmAll = () => {
+    const pending = medicines.filter((m) => !takenIds.has(String(m.id)));
     if (pending.length === 0) {
       speak("All medicines have been taken. Great job!");
       toast.success("All medicines taken!");
       return;
     }
-    const next = pending[0];
-    handleMarkTaken(next.med, next.time);
-    speak("Thank you. Your medicine has been recorded.");
+    handleMarkTaken(pending[0].id, pending[0].name);
   };
+
+  const grouped: Record<TOD, typeof medicines> = {
+    Morning: [],
+    Afternoon: [],
+    Night: [],
+  };
+  for (const med of medicines) {
+    const tod = med.time as TOD;
+    if (grouped[tod]) grouped[tod].push(med);
+  }
 
   if (isLoading) {
     return (
@@ -136,20 +113,17 @@ export function Reminders() {
       <div className="page-container pt-16 pb-36">
         <div className="flex items-center gap-3 mb-6">
           <Bell className="w-8 h-8 text-primary" />
-          <h1 className="text-3xl font-black">Today&apos;s Medicines</h1>
+          <h1 className="text-3xl font-black">Today's Medicines</h1>
         </div>
 
         <div className="space-y-6">
-          {(
-            Object.keys(grouped) as Array<"morning" | "afternoon" | "night">
-          ).map((groupKey) => {
-            const config = GROUP_CONFIG[groupKey];
-            const doses = grouped[groupKey];
+          {(["Morning", "Afternoon", "Night"] as TOD[]).map((tod) => {
+            const config = GROUP_CONFIG[tod];
+            const meds = grouped[tod];
             const Icon = config.icon;
-
             return (
               <motion.div
-                key={groupKey}
+                key={tod}
                 initial={{ opacity: 0, y: 16 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ duration: 0.3 }}
@@ -162,8 +136,7 @@ export function Reminders() {
                     {config.label}
                   </h2>
                 </div>
-
-                {doses.length === 0 ? (
+                {meds.length === 0 ? (
                   <div className="p-4 rounded-xl border border-border bg-card">
                     <Badge
                       variant="outline"
@@ -174,49 +147,50 @@ export function Reminders() {
                   </div>
                 ) : (
                   <div className="space-y-3">
-                    {doses.map((dose, idx) => (
-                      <motion.div
-                        key={`${dose.med.id}-${dose.time}`}
-                        className="flex items-center justify-between p-4 rounded-xl border border-border bg-card"
-                        whileTap={{ scale: 0.98 }}
-                        data-ocid={`reminders.item.${idx + 1}`}
-                      >
-                        <div className="flex items-center gap-3">
-                          <Pill className="w-6 h-6 text-primary" />
-                          <div>
-                            <p className="text-lg font-bold">{dose.med.name}</p>
-                            <p className="text-muted-foreground text-sm">
-                              {dose.med.dosage} · {formatTime12h(dose.time)}
-                            </p>
+                    {meds.map((med, idx) => {
+                      const taken = takenIds.has(String(med.id));
+                      return (
+                        <motion.div
+                          key={String(med.id)}
+                          className="flex items-center justify-between p-4 rounded-xl border border-border bg-card"
+                          data-ocid={`reminders.item.${idx + 1}`}
+                        >
+                          <div className="flex items-center gap-3">
+                            <Pill className="w-6 h-6 text-primary" />
+                            <div>
+                              <p className="text-lg font-bold">{med.name}</p>
+                              <p className="text-muted-foreground text-sm">
+                                {med.dosage}
+                              </p>
+                            </div>
                           </div>
-                        </div>
-                        {dose.taken ? (
-                          <div className="flex items-center gap-2">
-                            <CheckCircle className="w-6 h-6 text-green-500" />
-                            <span className="text-green-500 font-semibold">
-                              ✔ Taken
-                            </span>
-                          </div>
-                        ) : (
-                          <div className="flex items-center gap-2">
-                            <Clock className="w-5 h-5 text-muted-foreground" />
-                            <Badge
-                              variant="secondary"
-                              className="text-base px-3 py-1"
+                          {taken ? (
+                            <div className="flex items-center gap-2">
+                              <CheckCircle className="w-6 h-6 text-green-500" />
+                              <span className="text-green-500 font-semibold">
+                                Taken
+                              </span>
+                            </div>
+                          ) : (
+                            <Button
+                              size="sm"
+                              onClick={() => handleMarkTaken(med.id, med.name)}
+                              className="bg-primary text-primary-foreground rounded-lg px-4 h-10"
+                              data-ocid={`reminders.primary_button.${idx + 1}`}
                             >
-                              Pending
-                            </Badge>
-                          </div>
-                        )}
-                      </motion.div>
-                    ))}
+                              Take
+                            </Button>
+                          )}
+                        </motion.div>
+                      );
+                    })}
                   </div>
                 )}
               </motion.div>
             );
           })}
 
-          {todayDoses.length === 0 && (
+          {medicines.length === 0 && (
             <div
               className="text-center py-12"
               data-ocid="reminders.empty_state"
@@ -229,23 +203,14 @@ export function Reminders() {
           )}
         </div>
 
-        {/* Fixed confirm button */}
-        <div
-          className="fixed bottom-20 left-0 right-0 px-6"
-          style={{
-            maxWidth: "480px",
-            margin: "0 auto",
-            left: "50%",
-            transform: "translateX(-50%)",
-          }}
-        >
+        <div className="fixed bottom-20 left-1/2 -translate-x-1/2 w-full max-w-md px-6">
           <Button
-            onClick={handleConfirmMostRecent}
-            className="w-full btn-xl bg-green-600 hover:bg-green-500 text-white text-xl font-bold py-6 rounded-2xl shadow-lg"
-            aria-label="I took my medicine — confirm dose taken"
+            onClick={handleConfirmAll}
+            className="w-full h-16 rounded-2xl text-xl font-bold bg-green-600 hover:bg-green-500 text-white shadow-lg"
+            aria-label="I took my medicine"
             data-ocid="reminders.confirm_button"
           >
-            ✅ I Took My Medicine
+            <CheckCircle className="w-6 h-6 mr-2" /> I Took My Medicine
           </Button>
         </div>
       </div>

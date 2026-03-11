@@ -1,21 +1,15 @@
-import type {
-  Alert,
-  DoseLog,
-  HealthCheckIn,
-  Medication,
-  Profile,
-} from "@/backend";
+import type { Medicine, UserProfile } from "@/backend";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useActor } from "./useActor";
 
 export function useProfile() {
   const { actor, isFetching } = useActor();
-  return useQuery<Profile | null>({
+  return useQuery<UserProfile | null>({
     queryKey: ["profile"],
     queryFn: async () => {
       if (!actor) return null;
       try {
-        return await actor.getProfile();
+        return await actor.getUserProfile();
       } catch {
         return null;
       }
@@ -24,49 +18,56 @@ export function useProfile() {
   });
 }
 
-export function useMedications() {
+export function useMedicinesByTime(
+  timeOfDay: "Morning" | "Afternoon" | "Night",
+) {
   const { actor, isFetching } = useActor();
-  return useQuery<Medication[]>({
-    queryKey: ["medications"],
+  return useQuery<Medicine[]>({
+    queryKey: ["medicines", timeOfDay],
     queryFn: async () => {
       if (!actor) return [];
-      return actor.listMedications();
+      return actor.getMedicinesByTime(timeOfDay);
     },
     enabled: !!actor && !isFetching,
   });
 }
 
-export function useAlerts() {
+export function useAllMedicines() {
   const { actor, isFetching } = useActor();
-  return useQuery<Alert[]>({
-    queryKey: ["alerts"],
+  return useQuery<Medicine[]>({
+    queryKey: ["medicines", "all"],
     queryFn: async () => {
       if (!actor) return [];
-      return actor.listAlerts();
+      const [m, a, n] = await Promise.all([
+        actor.getMedicinesByTime("Morning"),
+        actor.getMedicinesByTime("Afternoon"),
+        actor.getMedicinesByTime("Night"),
+      ]);
+      return [...m, ...a, ...n];
     },
     enabled: !!actor && !isFetching,
   });
 }
 
-export function useDoseLogsToday() {
+export function useTodaysAdherence() {
   const { actor, isFetching } = useActor();
-  return useQuery<DoseLog[]>({
-    queryKey: ["doseLogs", "today"],
+  return useQuery({
+    queryKey: ["adherence", "today"],
     queryFn: async () => {
       if (!actor) return [];
-      return actor.getDoseLogsForToday();
+      return actor.getTodaysAdherence();
     },
     enabled: !!actor && !isFetching,
   });
 }
 
-export function useRecentCheckins() {
+export function useMissedDoses() {
   const { actor, isFetching } = useActor();
-  return useQuery<HealthCheckIn[]>({
-    queryKey: ["checkins"],
+  return useQuery<Medicine[]>({
+    queryKey: ["medicines", "missed"],
     queryFn: async () => {
       if (!actor) return [];
-      return actor.listRecentCheckIns();
+      return actor.getMissedDoses();
     },
     enabled: !!actor && !isFetching,
   });
@@ -79,118 +80,99 @@ export function useSaveProfile() {
     mutationFn: async (data: {
       name: string;
       age: bigint;
+      weight: bigint;
+      bloodGroup: string;
       preferredLanguage: string;
-      doctor: { name: string; phone: string };
-      caregiver: { name: string; phone: string };
+      medicalConditions: string[];
+      doctorContact: string | null;
+      primaryCaregiverContact: string;
+      secondaryCaregiverContact: string | null;
     }) => {
       if (!actor) throw new Error("No actor");
-      await actor.createOrUpdateProfile(
+      await actor.updateUserProfile(
         data.name,
         data.age,
+        data.weight,
+        data.bloodGroup,
         data.preferredLanguage,
-        data.doctor,
-        data.caregiver,
+        data.medicalConditions,
+        data.doctorContact,
+        data.primaryCaregiverContact,
+        data.secondaryCaregiverContact,
+        true,
       );
     },
     onSuccess: () => qc.invalidateQueries({ queryKey: ["profile"] }),
   });
 }
 
-export function useAddMedication() {
+export function useAddMedicine() {
   const { actor } = useActor();
   const qc = useQueryClient();
   return useMutation({
     mutationFn: async (data: {
       name: string;
       dosage: string;
-      frequency: bigint;
-      scheduledTimes: string[];
-      notes: string;
+      time: string;
+      source: string;
     }) => {
       if (!actor) throw new Error("No actor");
-      await actor.addMedication(
-        data.name,
-        data.dosage,
-        data.frequency,
-        data.scheduledTimes,
-        data.notes,
-      );
+      await actor.addMedicine(data.name, data.dosage, data.time, data.source);
     },
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["medications"] }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["medicines"] }),
   });
 }
 
-export function useDeleteMedication() {
+export function useDeleteMedicine() {
   const { actor } = useActor();
   const qc = useQueryClient();
   return useMutation({
     mutationFn: async (id: bigint) => {
       if (!actor) throw new Error("No actor");
-      await actor.deleteMedication(id);
+      await actor.deleteMedicine(id);
     },
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["medications"] }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["medicines"] }),
   });
 }
 
-export function useLogDose() {
+export function useLogAdherence() {
+  const { actor } = useActor();
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (data: { medicineId: bigint; confirmed: boolean }) => {
+      if (!actor) throw new Error("No actor");
+      await actor.logAdherence(data.medicineId, data.confirmed);
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["adherence"] }),
+  });
+}
+
+export function useSubmitHealthCheckin() {
   const { actor } = useActor();
   const qc = useQueryClient();
   return useMutation({
     mutationFn: async (data: {
-      medicationId: bigint;
-      confirmedByVoice: boolean;
+      session: string;
+      date: string;
+      questionsAndAnswers: Array<{ question: string; answer: string }>;
     }) => {
       if (!actor) throw new Error("No actor");
-      const ts = BigInt(Date.now()) * BigInt(1_000_000);
-      await actor.logDose(data.medicationId, ts, data.confirmedByVoice);
-    },
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["doseLogs"] }),
-  });
-}
-
-export function useCreateAlert() {
-  const { actor } = useActor();
-  const qc = useQueryClient();
-  return useMutation({
-    mutationFn: async (data: { alertType: string; message: string }) => {
-      if (!actor) throw new Error("No actor");
-      const ts = BigInt(Date.now()) * BigInt(1_000_000);
-      await actor.createAlert(data.alertType as any, data.message, ts);
-    },
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["alerts"] }),
-  });
-}
-
-export function useAcknowledgeAlert() {
-  const { actor } = useActor();
-  const qc = useQueryClient();
-  return useMutation({
-    mutationFn: async (alertId: bigint) => {
-      if (!actor) throw new Error("No actor");
-      await actor.acknowledgeAlert(alertId);
-    },
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["alerts"] }),
-  });
-}
-
-export function useSubmitCheckin() {
-  const { actor } = useActor();
-  const qc = useQueryClient();
-  return useMutation({
-    mutationFn: async (data: {
-      symptoms: string;
-      sideEffects: string;
-      mood: string;
-    }) => {
-      if (!actor) throw new Error("No actor");
-      const ts = BigInt(Date.now()) * BigInt(1_000_000);
-      await actor.submitCheckIn(
-        data.symptoms,
-        data.sideEffects,
-        data.mood as any,
-        ts,
+      await actor.submitHealthCheckin(
+        data.session,
+        data.date,
+        data.questionsAndAnswers,
       );
     },
     onSuccess: () => qc.invalidateQueries({ queryKey: ["checkins"] }),
+  });
+}
+
+export function useCreateEmergencyAlert() {
+  const { actor } = useActor();
+  return useMutation({
+    mutationFn: async (note: string) => {
+      if (!actor) throw new Error("No actor");
+      await actor.createEmergencyAlert(note);
+    },
   });
 }

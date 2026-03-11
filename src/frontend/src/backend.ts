@@ -89,354 +89,274 @@ export class ExternalBlob {
         return this;
     }
 }
+export type PhoneNumber = string;
 export type Time = bigint;
-export type MedicationId = bigint;
-export interface Contact {
-    name: string;
-    phone: Phone;
-}
-export type AlertId = bigint;
-export type Phone = string;
-export interface HealthCheckIn {
-    mood: Mood;
+export interface HealthCheckinResponse {
+    date: string;
+    questionsAndAnswers: Array<{
+        question: string;
+        answer: string;
+    }>;
+    session: string;
     timestamp: Time;
-    sideEffects: string;
-    symptoms: string;
 }
-export interface Profile {
+export type MedicineId = bigint;
+export interface Medicine {
+    id: MedicineId;
+    dosage: string;
+    source: string;
+    name: string;
+    time: string;
+    addedAt: Time;
+}
+export interface AdherenceLog {
+    takenAt: Time;
+    confirmed: boolean;
+    medicineId: MedicineId;
+}
+export interface UserProfile {
     age: bigint;
+    weight: bigint;
     principal: Principal;
     preferredLanguage: string;
-    doctor: Contact;
     name: string;
-    caregiver: Contact;
-}
-export interface DoseLog {
-    medicationId: MedicationId;
-    timestamp: Time;
-    confirmedByVoice: boolean;
-}
-export interface Medication {
-    id: MedicationId;
-    dosage: string;
-    name: string;
-    notes: string;
-    scheduledTimes: Array<string>;
-    frequency: bigint;
-}
-export interface Alert {
-    id: AlertId;
-    alertType: AlertType;
-    acknowledged: boolean;
-    message: string;
-    timestamp: Time;
-}
-export enum AlertType {
-    emergency = "emergency",
-    missedDose = "missedDose",
-    healthUpdate = "healthUpdate"
-}
-export enum Mood {
-    fair = "fair",
-    good = "good",
-    poor = "poor"
+    medicalConditions: Array<string>;
+    doctorContact?: PhoneNumber;
+    bloodGroup: string;
+    primaryCaregiverContact: PhoneNumber;
+    registrationComplete: boolean;
+    secondaryCaregiverContact?: PhoneNumber;
 }
 export interface backendInterface {
-    acknowledgeAlert(alertId: AlertId): Promise<void>;
-    addMedication(name: string, dosage: string, frequency: bigint, scheduledTimes: Array<string>, notes: string): Promise<void>;
-    createAlert(alertType: AlertType, message: string, timestamp: Time): Promise<void>;
-    createOrUpdateProfile(name: string, age: bigint, preferredLanguage: string, doctor: Contact, caregiver: Contact): Promise<void>;
-    deleteMedication(medicationId: MedicationId): Promise<void>;
-    getDoseLogsForToday(): Promise<Array<DoseLog>>;
-    getProfile(): Promise<Profile>;
-    listAlerts(): Promise<Array<Alert>>;
-    listMedications(): Promise<Array<Medication>>;
-    listRecentCheckIns(): Promise<Array<HealthCheckIn>>;
-    logDose(medicationId: MedicationId, timestamp: Time, confirmedByVoice: boolean): Promise<void>;
-    submitCheckIn(symptoms: string, sideEffects: string, mood: Mood, timestamp: Time): Promise<void>;
+    addMedicine(name: string, dosage: string, time: string, source: string): Promise<MedicineId>;
+    createEmergencyAlert(note: string): Promise<void>;
+    deleteMedicine(medicineId: MedicineId): Promise<void>;
+    getHealthCheckinsByDate(date: string): Promise<HealthCheckinResponse | null>;
+    getMedicinesByTime(timeOfDay: string): Promise<Array<Medicine>>;
+    getMissedDoses(): Promise<Array<Medicine>>;
+    getTodaysAdherence(): Promise<Array<AdherenceLog>>;
+    getUserProfile(): Promise<UserProfile | null>;
+    logAdherence(medicineId: MedicineId, confirmed: boolean): Promise<void>;
+    submitHealthCheckin(session: string, date: string, questionsAndAnswers: Array<{
+        question: string;
+        answer: string;
+    }>): Promise<void>;
+    updateUserProfile(name: string, age: bigint, weight: bigint, bloodGroup: string, preferredLanguage: string, medicalConditions: Array<string>, doctorContact: PhoneNumber | null, primaryCaregiverContact: PhoneNumber, secondaryCaregiverContact: PhoneNumber | null, registrationComplete: boolean): Promise<void>;
 }
-import type { Alert as _Alert, AlertId as _AlertId, AlertType as _AlertType, HealthCheckIn as _HealthCheckIn, Mood as _Mood, Time as _Time } from "./declarations/backend.did.d.ts";
+import type { HealthCheckinResponse as _HealthCheckinResponse, PhoneNumber as _PhoneNumber, UserProfile as _UserProfile } from "./declarations/backend.did.d.ts";
 export class Backend implements backendInterface {
     constructor(private actor: ActorSubclass<_SERVICE>, private _uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, private _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, private processError?: (error: unknown) => never){}
-    async acknowledgeAlert(arg0: AlertId): Promise<void> {
+    async addMedicine(arg0: string, arg1: string, arg2: string, arg3: string): Promise<MedicineId> {
         if (this.processError) {
             try {
-                const result = await this.actor.acknowledgeAlert(arg0);
+                const result = await this.actor.addMedicine(arg0, arg1, arg2, arg3);
                 return result;
             } catch (e) {
                 this.processError(e);
                 throw new Error("unreachable");
             }
         } else {
-            const result = await this.actor.acknowledgeAlert(arg0);
+            const result = await this.actor.addMedicine(arg0, arg1, arg2, arg3);
             return result;
         }
     }
-    async addMedication(arg0: string, arg1: string, arg2: bigint, arg3: Array<string>, arg4: string): Promise<void> {
+    async createEmergencyAlert(arg0: string): Promise<void> {
         if (this.processError) {
             try {
-                const result = await this.actor.addMedication(arg0, arg1, arg2, arg3, arg4);
+                const result = await this.actor.createEmergencyAlert(arg0);
                 return result;
             } catch (e) {
                 this.processError(e);
                 throw new Error("unreachable");
             }
         } else {
-            const result = await this.actor.addMedication(arg0, arg1, arg2, arg3, arg4);
+            const result = await this.actor.createEmergencyAlert(arg0);
             return result;
         }
     }
-    async createAlert(arg0: AlertType, arg1: string, arg2: Time): Promise<void> {
+    async deleteMedicine(arg0: MedicineId): Promise<void> {
         if (this.processError) {
             try {
-                const result = await this.actor.createAlert(to_candid_AlertType_n1(this._uploadFile, this._downloadFile, arg0), arg1, arg2);
+                const result = await this.actor.deleteMedicine(arg0);
                 return result;
             } catch (e) {
                 this.processError(e);
                 throw new Error("unreachable");
             }
         } else {
-            const result = await this.actor.createAlert(to_candid_AlertType_n1(this._uploadFile, this._downloadFile, arg0), arg1, arg2);
+            const result = await this.actor.deleteMedicine(arg0);
             return result;
         }
     }
-    async createOrUpdateProfile(arg0: string, arg1: bigint, arg2: string, arg3: Contact, arg4: Contact): Promise<void> {
+    async getHealthCheckinsByDate(arg0: string): Promise<HealthCheckinResponse | null> {
         if (this.processError) {
             try {
-                const result = await this.actor.createOrUpdateProfile(arg0, arg1, arg2, arg3, arg4);
+                const result = await this.actor.getHealthCheckinsByDate(arg0);
+                return from_candid_opt_n1(this._uploadFile, this._downloadFile, result);
+            } catch (e) {
+                this.processError(e);
+                throw new Error("unreachable");
+            }
+        } else {
+            const result = await this.actor.getHealthCheckinsByDate(arg0);
+            return from_candid_opt_n1(this._uploadFile, this._downloadFile, result);
+        }
+    }
+    async getMedicinesByTime(arg0: string): Promise<Array<Medicine>> {
+        if (this.processError) {
+            try {
+                const result = await this.actor.getMedicinesByTime(arg0);
                 return result;
             } catch (e) {
                 this.processError(e);
                 throw new Error("unreachable");
             }
         } else {
-            const result = await this.actor.createOrUpdateProfile(arg0, arg1, arg2, arg3, arg4);
+            const result = await this.actor.getMedicinesByTime(arg0);
             return result;
         }
     }
-    async deleteMedication(arg0: MedicationId): Promise<void> {
+    async getMissedDoses(): Promise<Array<Medicine>> {
         if (this.processError) {
             try {
-                const result = await this.actor.deleteMedication(arg0);
+                const result = await this.actor.getMissedDoses();
                 return result;
             } catch (e) {
                 this.processError(e);
                 throw new Error("unreachable");
             }
         } else {
-            const result = await this.actor.deleteMedication(arg0);
+            const result = await this.actor.getMissedDoses();
             return result;
         }
     }
-    async getDoseLogsForToday(): Promise<Array<DoseLog>> {
+    async getTodaysAdherence(): Promise<Array<AdherenceLog>> {
         if (this.processError) {
             try {
-                const result = await this.actor.getDoseLogsForToday();
+                const result = await this.actor.getTodaysAdherence();
                 return result;
             } catch (e) {
                 this.processError(e);
                 throw new Error("unreachable");
             }
         } else {
-            const result = await this.actor.getDoseLogsForToday();
+            const result = await this.actor.getTodaysAdherence();
             return result;
         }
     }
-    async getProfile(): Promise<Profile> {
+    async getUserProfile(): Promise<UserProfile | null> {
         if (this.processError) {
             try {
-                const result = await this.actor.getProfile();
+                const result = await this.actor.getUserProfile();
+                return from_candid_opt_n2(this._uploadFile, this._downloadFile, result);
+            } catch (e) {
+                this.processError(e);
+                throw new Error("unreachable");
+            }
+        } else {
+            const result = await this.actor.getUserProfile();
+            return from_candid_opt_n2(this._uploadFile, this._downloadFile, result);
+        }
+    }
+    async logAdherence(arg0: MedicineId, arg1: boolean): Promise<void> {
+        if (this.processError) {
+            try {
+                const result = await this.actor.logAdherence(arg0, arg1);
                 return result;
             } catch (e) {
                 this.processError(e);
                 throw new Error("unreachable");
             }
         } else {
-            const result = await this.actor.getProfile();
+            const result = await this.actor.logAdherence(arg0, arg1);
             return result;
         }
     }
-    async listAlerts(): Promise<Array<Alert>> {
+    async submitHealthCheckin(arg0: string, arg1: string, arg2: Array<{
+        question: string;
+        answer: string;
+    }>): Promise<void> {
         if (this.processError) {
             try {
-                const result = await this.actor.listAlerts();
-                return from_candid_vec_n3(this._uploadFile, this._downloadFile, result);
-            } catch (e) {
-                this.processError(e);
-                throw new Error("unreachable");
-            }
-        } else {
-            const result = await this.actor.listAlerts();
-            return from_candid_vec_n3(this._uploadFile, this._downloadFile, result);
-        }
-    }
-    async listMedications(): Promise<Array<Medication>> {
-        if (this.processError) {
-            try {
-                const result = await this.actor.listMedications();
+                const result = await this.actor.submitHealthCheckin(arg0, arg1, arg2);
                 return result;
             } catch (e) {
                 this.processError(e);
                 throw new Error("unreachable");
             }
         } else {
-            const result = await this.actor.listMedications();
+            const result = await this.actor.submitHealthCheckin(arg0, arg1, arg2);
             return result;
         }
     }
-    async listRecentCheckIns(): Promise<Array<HealthCheckIn>> {
+    async updateUserProfile(arg0: string, arg1: bigint, arg2: bigint, arg3: string, arg4: string, arg5: Array<string>, arg6: PhoneNumber | null, arg7: PhoneNumber, arg8: PhoneNumber | null, arg9: boolean): Promise<void> {
         if (this.processError) {
             try {
-                const result = await this.actor.listRecentCheckIns();
-                return from_candid_vec_n8(this._uploadFile, this._downloadFile, result);
-            } catch (e) {
-                this.processError(e);
-                throw new Error("unreachable");
-            }
-        } else {
-            const result = await this.actor.listRecentCheckIns();
-            return from_candid_vec_n8(this._uploadFile, this._downloadFile, result);
-        }
-    }
-    async logDose(arg0: MedicationId, arg1: Time, arg2: boolean): Promise<void> {
-        if (this.processError) {
-            try {
-                const result = await this.actor.logDose(arg0, arg1, arg2);
+                const result = await this.actor.updateUserProfile(arg0, arg1, arg2, arg3, arg4, arg5, to_candid_opt_n6(this._uploadFile, this._downloadFile, arg6), arg7, to_candid_opt_n6(this._uploadFile, this._downloadFile, arg8), arg9);
                 return result;
             } catch (e) {
                 this.processError(e);
                 throw new Error("unreachable");
             }
         } else {
-            const result = await this.actor.logDose(arg0, arg1, arg2);
-            return result;
-        }
-    }
-    async submitCheckIn(arg0: string, arg1: string, arg2: Mood, arg3: Time): Promise<void> {
-        if (this.processError) {
-            try {
-                const result = await this.actor.submitCheckIn(arg0, arg1, to_candid_Mood_n13(this._uploadFile, this._downloadFile, arg2), arg3);
-                return result;
-            } catch (e) {
-                this.processError(e);
-                throw new Error("unreachable");
-            }
-        } else {
-            const result = await this.actor.submitCheckIn(arg0, arg1, to_candid_Mood_n13(this._uploadFile, this._downloadFile, arg2), arg3);
+            const result = await this.actor.updateUserProfile(arg0, arg1, arg2, arg3, arg4, arg5, to_candid_opt_n6(this._uploadFile, this._downloadFile, arg6), arg7, to_candid_opt_n6(this._uploadFile, this._downloadFile, arg8), arg9);
             return result;
         }
     }
 }
-function from_candid_AlertType_n6(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: _AlertType): AlertType {
-    return from_candid_variant_n7(_uploadFile, _downloadFile, value);
+function from_candid_UserProfile_n3(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: _UserProfile): UserProfile {
+    return from_candid_record_n4(_uploadFile, _downloadFile, value);
 }
-function from_candid_Alert_n4(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: _Alert): Alert {
-    return from_candid_record_n5(_uploadFile, _downloadFile, value);
+function from_candid_opt_n1(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: [] | [_HealthCheckinResponse]): HealthCheckinResponse | null {
+    return value.length === 0 ? null : value[0];
 }
-function from_candid_HealthCheckIn_n9(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: _HealthCheckIn): HealthCheckIn {
-    return from_candid_record_n10(_uploadFile, _downloadFile, value);
+function from_candid_opt_n2(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: [] | [_UserProfile]): UserProfile | null {
+    return value.length === 0 ? null : from_candid_UserProfile_n3(_uploadFile, _downloadFile, value[0]);
 }
-function from_candid_Mood_n11(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: _Mood): Mood {
-    return from_candid_variant_n12(_uploadFile, _downloadFile, value);
+function from_candid_opt_n5(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: [] | [_PhoneNumber]): PhoneNumber | null {
+    return value.length === 0 ? null : value[0];
 }
-function from_candid_record_n10(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: {
-    mood: _Mood;
-    timestamp: _Time;
-    sideEffects: string;
-    symptoms: string;
+function from_candid_record_n4(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: {
+    age: bigint;
+    weight: bigint;
+    principal: Principal;
+    preferredLanguage: string;
+    name: string;
+    medicalConditions: Array<string>;
+    doctorContact: [] | [_PhoneNumber];
+    bloodGroup: string;
+    primaryCaregiverContact: _PhoneNumber;
+    registrationComplete: boolean;
+    secondaryCaregiverContact: [] | [_PhoneNumber];
 }): {
-    mood: Mood;
-    timestamp: Time;
-    sideEffects: string;
-    symptoms: string;
+    age: bigint;
+    weight: bigint;
+    principal: Principal;
+    preferredLanguage: string;
+    name: string;
+    medicalConditions: Array<string>;
+    doctorContact?: PhoneNumber;
+    bloodGroup: string;
+    primaryCaregiverContact: PhoneNumber;
+    registrationComplete: boolean;
+    secondaryCaregiverContact?: PhoneNumber;
 } {
     return {
-        mood: from_candid_Mood_n11(_uploadFile, _downloadFile, value.mood),
-        timestamp: value.timestamp,
-        sideEffects: value.sideEffects,
-        symptoms: value.symptoms
+        age: value.age,
+        weight: value.weight,
+        principal: value.principal,
+        preferredLanguage: value.preferredLanguage,
+        name: value.name,
+        medicalConditions: value.medicalConditions,
+        doctorContact: record_opt_to_undefined(from_candid_opt_n5(_uploadFile, _downloadFile, value.doctorContact)),
+        bloodGroup: value.bloodGroup,
+        primaryCaregiverContact: value.primaryCaregiverContact,
+        registrationComplete: value.registrationComplete,
+        secondaryCaregiverContact: record_opt_to_undefined(from_candid_opt_n5(_uploadFile, _downloadFile, value.secondaryCaregiverContact))
     };
 }
-function from_candid_record_n5(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: {
-    id: _AlertId;
-    alertType: _AlertType;
-    acknowledged: boolean;
-    message: string;
-    timestamp: _Time;
-}): {
-    id: AlertId;
-    alertType: AlertType;
-    acknowledged: boolean;
-    message: string;
-    timestamp: Time;
-} {
-    return {
-        id: value.id,
-        alertType: from_candid_AlertType_n6(_uploadFile, _downloadFile, value.alertType),
-        acknowledged: value.acknowledged,
-        message: value.message,
-        timestamp: value.timestamp
-    };
-}
-function from_candid_variant_n12(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: {
-    fair: null;
-} | {
-    good: null;
-} | {
-    poor: null;
-}): Mood {
-    return "fair" in value ? Mood.fair : "good" in value ? Mood.good : "poor" in value ? Mood.poor : value;
-}
-function from_candid_variant_n7(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: {
-    emergency: null;
-} | {
-    missedDose: null;
-} | {
-    healthUpdate: null;
-}): AlertType {
-    return "emergency" in value ? AlertType.emergency : "missedDose" in value ? AlertType.missedDose : "healthUpdate" in value ? AlertType.healthUpdate : value;
-}
-function from_candid_vec_n3(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: Array<_Alert>): Array<Alert> {
-    return value.map((x)=>from_candid_Alert_n4(_uploadFile, _downloadFile, x));
-}
-function from_candid_vec_n8(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: Array<_HealthCheckIn>): Array<HealthCheckIn> {
-    return value.map((x)=>from_candid_HealthCheckIn_n9(_uploadFile, _downloadFile, x));
-}
-function to_candid_AlertType_n1(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: AlertType): _AlertType {
-    return to_candid_variant_n2(_uploadFile, _downloadFile, value);
-}
-function to_candid_Mood_n13(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: Mood): _Mood {
-    return to_candid_variant_n14(_uploadFile, _downloadFile, value);
-}
-function to_candid_variant_n14(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: Mood): {
-    fair: null;
-} | {
-    good: null;
-} | {
-    poor: null;
-} {
-    return value == Mood.fair ? {
-        fair: null
-    } : value == Mood.good ? {
-        good: null
-    } : value == Mood.poor ? {
-        poor: null
-    } : value;
-}
-function to_candid_variant_n2(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: AlertType): {
-    emergency: null;
-} | {
-    missedDose: null;
-} | {
-    healthUpdate: null;
-} {
-    return value == AlertType.emergency ? {
-        emergency: null
-    } : value == AlertType.missedDose ? {
-        missedDose: null
-    } : value == AlertType.healthUpdate ? {
-        healthUpdate: null
-    } : value;
+function to_candid_opt_n6(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: PhoneNumber | null): [] | [_PhoneNumber] {
+    return value === null ? candid_none() : candid_some(value);
 }
 export interface CreateActorOptions {
     agent?: Agent;

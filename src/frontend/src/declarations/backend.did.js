@@ -8,153 +8,173 @@
 
 import { IDL } from '@icp-sdk/core/candid';
 
-export const AlertId = IDL.Nat;
-export const AlertType = IDL.Variant({
-  'emergency' : IDL.Null,
-  'missedDose' : IDL.Null,
-  'healthUpdate' : IDL.Null,
-});
+export const MedicineId = IDL.Nat;
 export const Time = IDL.Int;
-export const Phone = IDL.Text;
-export const Contact = IDL.Record({ 'name' : IDL.Text, 'phone' : Phone });
-export const MedicationId = IDL.Nat;
-export const DoseLog = IDL.Record({
-  'medicationId' : MedicationId,
+export const HealthCheckinResponse = IDL.Record({
+  'date' : IDL.Text,
+  'questionsAndAnswers' : IDL.Vec(
+    IDL.Record({ 'question' : IDL.Text, 'answer' : IDL.Text })
+  ),
+  'session' : IDL.Text,
   'timestamp' : Time,
-  'confirmedByVoice' : IDL.Bool,
 });
-export const Profile = IDL.Record({
+export const Medicine = IDL.Record({
+  'id' : MedicineId,
+  'dosage' : IDL.Text,
+  'source' : IDL.Text,
+  'name' : IDL.Text,
+  'time' : IDL.Text,
+  'addedAt' : Time,
+});
+export const AdherenceLog = IDL.Record({
+  'takenAt' : Time,
+  'confirmed' : IDL.Bool,
+  'medicineId' : MedicineId,
+});
+export const PhoneNumber = IDL.Text;
+export const UserProfile = IDL.Record({
   'age' : IDL.Nat,
+  'weight' : IDL.Nat,
   'principal' : IDL.Principal,
   'preferredLanguage' : IDL.Text,
-  'doctor' : Contact,
   'name' : IDL.Text,
-  'caregiver' : Contact,
-});
-export const Alert = IDL.Record({
-  'id' : AlertId,
-  'alertType' : AlertType,
-  'acknowledged' : IDL.Bool,
-  'message' : IDL.Text,
-  'timestamp' : Time,
-});
-export const Medication = IDL.Record({
-  'id' : MedicationId,
-  'dosage' : IDL.Text,
-  'name' : IDL.Text,
-  'notes' : IDL.Text,
-  'scheduledTimes' : IDL.Vec(IDL.Text),
-  'frequency' : IDL.Nat,
-});
-export const Mood = IDL.Variant({
-  'fair' : IDL.Null,
-  'good' : IDL.Null,
-  'poor' : IDL.Null,
-});
-export const HealthCheckIn = IDL.Record({
-  'mood' : Mood,
-  'timestamp' : Time,
-  'sideEffects' : IDL.Text,
-  'symptoms' : IDL.Text,
+  'medicalConditions' : IDL.Vec(IDL.Text),
+  'doctorContact' : IDL.Opt(PhoneNumber),
+  'bloodGroup' : IDL.Text,
+  'primaryCaregiverContact' : PhoneNumber,
+  'registrationComplete' : IDL.Bool,
+  'secondaryCaregiverContact' : IDL.Opt(PhoneNumber),
 });
 
 export const idlService = IDL.Service({
-  'acknowledgeAlert' : IDL.Func([AlertId], [], []),
-  'addMedication' : IDL.Func(
-      [IDL.Text, IDL.Text, IDL.Nat, IDL.Vec(IDL.Text), IDL.Text],
+  'addMedicine' : IDL.Func(
+      [IDL.Text, IDL.Text, IDL.Text, IDL.Text],
+      [MedicineId],
+      [],
+    ),
+  'createEmergencyAlert' : IDL.Func([IDL.Text], [], []),
+  'deleteMedicine' : IDL.Func([MedicineId], [], []),
+  'getHealthCheckinsByDate' : IDL.Func(
+      [IDL.Text],
+      [IDL.Opt(HealthCheckinResponse)],
+      ['query'],
+    ),
+  'getMedicinesByTime' : IDL.Func([IDL.Text], [IDL.Vec(Medicine)], ['query']),
+  'getMissedDoses' : IDL.Func([], [IDL.Vec(Medicine)], ['query']),
+  'getTodaysAdherence' : IDL.Func([], [IDL.Vec(AdherenceLog)], ['query']),
+  'getUserProfile' : IDL.Func([], [IDL.Opt(UserProfile)], ['query']),
+  'logAdherence' : IDL.Func([MedicineId, IDL.Bool], [], []),
+  'submitHealthCheckin' : IDL.Func(
+      [
+        IDL.Text,
+        IDL.Text,
+        IDL.Vec(IDL.Record({ 'question' : IDL.Text, 'answer' : IDL.Text })),
+      ],
       [],
       [],
     ),
-  'createAlert' : IDL.Func([AlertType, IDL.Text, Time], [], []),
-  'createOrUpdateProfile' : IDL.Func(
-      [IDL.Text, IDL.Nat, IDL.Text, Contact, Contact],
+  'updateUserProfile' : IDL.Func(
+      [
+        IDL.Text,
+        IDL.Nat,
+        IDL.Nat,
+        IDL.Text,
+        IDL.Text,
+        IDL.Vec(IDL.Text),
+        IDL.Opt(PhoneNumber),
+        PhoneNumber,
+        IDL.Opt(PhoneNumber),
+        IDL.Bool,
+      ],
       [],
       [],
     ),
-  'deleteMedication' : IDL.Func([MedicationId], [], []),
-  'getDoseLogsForToday' : IDL.Func([], [IDL.Vec(DoseLog)], ['query']),
-  'getProfile' : IDL.Func([], [Profile], ['query']),
-  'listAlerts' : IDL.Func([], [IDL.Vec(Alert)], ['query']),
-  'listMedications' : IDL.Func([], [IDL.Vec(Medication)], ['query']),
-  'listRecentCheckIns' : IDL.Func([], [IDL.Vec(HealthCheckIn)], ['query']),
-  'logDose' : IDL.Func([MedicationId, Time, IDL.Bool], [], []),
-  'submitCheckIn' : IDL.Func([IDL.Text, IDL.Text, Mood, Time], [], []),
 });
 
 export const idlInitArgs = [];
 
 export const idlFactory = ({ IDL }) => {
-  const AlertId = IDL.Nat;
-  const AlertType = IDL.Variant({
-    'emergency' : IDL.Null,
-    'missedDose' : IDL.Null,
-    'healthUpdate' : IDL.Null,
-  });
+  const MedicineId = IDL.Nat;
   const Time = IDL.Int;
-  const Phone = IDL.Text;
-  const Contact = IDL.Record({ 'name' : IDL.Text, 'phone' : Phone });
-  const MedicationId = IDL.Nat;
-  const DoseLog = IDL.Record({
-    'medicationId' : MedicationId,
+  const HealthCheckinResponse = IDL.Record({
+    'date' : IDL.Text,
+    'questionsAndAnswers' : IDL.Vec(
+      IDL.Record({ 'question' : IDL.Text, 'answer' : IDL.Text })
+    ),
+    'session' : IDL.Text,
     'timestamp' : Time,
-    'confirmedByVoice' : IDL.Bool,
   });
-  const Profile = IDL.Record({
+  const Medicine = IDL.Record({
+    'id' : MedicineId,
+    'dosage' : IDL.Text,
+    'source' : IDL.Text,
+    'name' : IDL.Text,
+    'time' : IDL.Text,
+    'addedAt' : Time,
+  });
+  const AdherenceLog = IDL.Record({
+    'takenAt' : Time,
+    'confirmed' : IDL.Bool,
+    'medicineId' : MedicineId,
+  });
+  const PhoneNumber = IDL.Text;
+  const UserProfile = IDL.Record({
     'age' : IDL.Nat,
+    'weight' : IDL.Nat,
     'principal' : IDL.Principal,
     'preferredLanguage' : IDL.Text,
-    'doctor' : Contact,
     'name' : IDL.Text,
-    'caregiver' : Contact,
-  });
-  const Alert = IDL.Record({
-    'id' : AlertId,
-    'alertType' : AlertType,
-    'acknowledged' : IDL.Bool,
-    'message' : IDL.Text,
-    'timestamp' : Time,
-  });
-  const Medication = IDL.Record({
-    'id' : MedicationId,
-    'dosage' : IDL.Text,
-    'name' : IDL.Text,
-    'notes' : IDL.Text,
-    'scheduledTimes' : IDL.Vec(IDL.Text),
-    'frequency' : IDL.Nat,
-  });
-  const Mood = IDL.Variant({
-    'fair' : IDL.Null,
-    'good' : IDL.Null,
-    'poor' : IDL.Null,
-  });
-  const HealthCheckIn = IDL.Record({
-    'mood' : Mood,
-    'timestamp' : Time,
-    'sideEffects' : IDL.Text,
-    'symptoms' : IDL.Text,
+    'medicalConditions' : IDL.Vec(IDL.Text),
+    'doctorContact' : IDL.Opt(PhoneNumber),
+    'bloodGroup' : IDL.Text,
+    'primaryCaregiverContact' : PhoneNumber,
+    'registrationComplete' : IDL.Bool,
+    'secondaryCaregiverContact' : IDL.Opt(PhoneNumber),
   });
   
   return IDL.Service({
-    'acknowledgeAlert' : IDL.Func([AlertId], [], []),
-    'addMedication' : IDL.Func(
-        [IDL.Text, IDL.Text, IDL.Nat, IDL.Vec(IDL.Text), IDL.Text],
+    'addMedicine' : IDL.Func(
+        [IDL.Text, IDL.Text, IDL.Text, IDL.Text],
+        [MedicineId],
+        [],
+      ),
+    'createEmergencyAlert' : IDL.Func([IDL.Text], [], []),
+    'deleteMedicine' : IDL.Func([MedicineId], [], []),
+    'getHealthCheckinsByDate' : IDL.Func(
+        [IDL.Text],
+        [IDL.Opt(HealthCheckinResponse)],
+        ['query'],
+      ),
+    'getMedicinesByTime' : IDL.Func([IDL.Text], [IDL.Vec(Medicine)], ['query']),
+    'getMissedDoses' : IDL.Func([], [IDL.Vec(Medicine)], ['query']),
+    'getTodaysAdherence' : IDL.Func([], [IDL.Vec(AdherenceLog)], ['query']),
+    'getUserProfile' : IDL.Func([], [IDL.Opt(UserProfile)], ['query']),
+    'logAdherence' : IDL.Func([MedicineId, IDL.Bool], [], []),
+    'submitHealthCheckin' : IDL.Func(
+        [
+          IDL.Text,
+          IDL.Text,
+          IDL.Vec(IDL.Record({ 'question' : IDL.Text, 'answer' : IDL.Text })),
+        ],
         [],
         [],
       ),
-    'createAlert' : IDL.Func([AlertType, IDL.Text, Time], [], []),
-    'createOrUpdateProfile' : IDL.Func(
-        [IDL.Text, IDL.Nat, IDL.Text, Contact, Contact],
+    'updateUserProfile' : IDL.Func(
+        [
+          IDL.Text,
+          IDL.Nat,
+          IDL.Nat,
+          IDL.Text,
+          IDL.Text,
+          IDL.Vec(IDL.Text),
+          IDL.Opt(PhoneNumber),
+          PhoneNumber,
+          IDL.Opt(PhoneNumber),
+          IDL.Bool,
+        ],
         [],
         [],
       ),
-    'deleteMedication' : IDL.Func([MedicationId], [], []),
-    'getDoseLogsForToday' : IDL.Func([], [IDL.Vec(DoseLog)], ['query']),
-    'getProfile' : IDL.Func([], [Profile], ['query']),
-    'listAlerts' : IDL.Func([], [IDL.Vec(Alert)], ['query']),
-    'listMedications' : IDL.Func([], [IDL.Vec(Medication)], ['query']),
-    'listRecentCheckIns' : IDL.Func([], [IDL.Vec(HealthCheckIn)], ['query']),
-    'logDose' : IDL.Func([MedicationId, Time, IDL.Bool], [], []),
-    'submitCheckIn' : IDL.Func([IDL.Text, IDL.Text, Mood, Time], [], []),
   });
 };
 

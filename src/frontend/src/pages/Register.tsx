@@ -1,13 +1,6 @@
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import { useAppContext } from "@/context/AppContext";
 import { useSaveProfile } from "@/hooks/useQueries";
 import { useVoice } from "@/hooks/useVoice";
@@ -24,30 +17,30 @@ import { AnimatePresence, motion } from "motion/react";
 import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 
-const LANGUAGES = [
-  { value: "en", label: "English" },
-  { value: "hi", label: "Hindi" },
-  { value: "ta", label: "Tamil" },
-  { value: "bn", label: "Bengali" },
-  { value: "te", label: "Telugu" },
-];
+const BLOOD_GROUPS = ["A+", "A-", "B+", "B-", "O+", "O-", "AB+", "AB-"];
+const LANGUAGES = ["English", "Hindi", "Tamil", "Telugu", "Bengali"];
 
-type StepType = "text" | "number" | "select" | "tel" | "dual";
+type FieldKey =
+  | "name"
+  | "age"
+  | "weight"
+  | "bloodGroup"
+  | "language"
+  | "conditions"
+  | "doctorContact"
+  | "primaryCaregiver"
+  | "secondaryCaregiver";
 
 interface Step {
-  key: string;
+  key: FieldKey;
   label: string;
   prompt: string;
-  type: StepType;
+  placeholder?: string;
+  inputType?: string;
   optional?: boolean;
   skipPrompt?: string;
-  placeholder?: string;
-  subFields?: Array<{
-    key: string;
-    label: string;
-    placeholder: string;
-    type: string;
-  }>;
+  type: "text" | "number" | "buttons" | "tel";
+  options?: string[];
 }
 
 const STEPS: Step[] = [
@@ -55,71 +48,77 @@ const STEPS: Step[] = [
     key: "name",
     label: "Your Name",
     prompt: "Please tell me your name.",
-    type: "text",
     placeholder: "Enter your full name",
+    type: "text",
   },
   {
     key: "age",
     label: "Your Age",
     prompt: "How old are you?",
-    type: "number",
     placeholder: "Enter your age",
+    type: "number",
+    inputType: "number",
+  },
+  {
+    key: "weight",
+    label: "Your Weight (kg)",
+    prompt: "What is your weight in kilograms?",
+    placeholder: "Enter weight in kg",
+    type: "number",
+    inputType: "number",
+  },
+  {
+    key: "bloodGroup",
+    label: "Blood Group",
+    prompt: "What is your blood group? Please select one.",
+    type: "buttons",
+    options: BLOOD_GROUPS,
   },
   {
     key: "language",
     label: "Preferred Language",
     prompt: "What is your preferred language?",
-    type: "select",
+    type: "buttons",
+    options: LANGUAGES,
   },
   {
     key: "conditions",
     label: "Medical Conditions",
-    prompt: "What are your medical conditions?",
-    type: "text",
+    prompt:
+      "What are your medical conditions? Say them or type, separated by commas.",
     placeholder: "e.g. Diabetes, Hypertension",
+    type: "text",
   },
   {
     key: "doctorContact",
     label: "Doctor Contact",
     prompt:
-      "Do you have a personal doctor? If yes, please provide their name and phone number. If not, you can skip this step.",
-    type: "dual",
+      "Do you have a personal doctor? If yes, provide their phone number. If not, skip this step.",
+    placeholder: "Doctor's phone number",
+    type: "tel",
+    inputType: "tel",
     optional: true,
     skipPrompt: "No problem, skipping doctor contact.",
-    subFields: [
-      {
-        key: "doctorName",
-        label: "Doctor's Name",
-        placeholder: "Enter doctor name",
-        type: "text",
-      },
-      {
-        key: "doctorPhone",
-        label: "Doctor's Phone",
-        placeholder: "Enter phone number",
-        type: "tel",
-      },
-    ],
   },
   {
-    key: "caregiverContact",
-    label: "Caregiver Contact",
-    prompt: "Please provide your caregiver's name and phone number.",
-    type: "dual",
-    subFields: [
-      {
-        key: "caregiverName",
-        label: "Caregiver's Name",
-        placeholder: "Enter caregiver name",
-        type: "text",
-      },
-      {
-        key: "caregiverPhone",
-        label: "Caregiver's Phone",
-        placeholder: "Enter phone number",
-        type: "tel",
-      },
-    ],
+    key: "primaryCaregiver",
+    label: "Primary Caregiver Phone",
+    prompt:
+      "Please provide your primary caregiver's phone number. This is required.",
+    placeholder: "Primary caregiver phone",
+    type: "tel",
+    inputType: "tel",
+  },
+  {
+    key: "secondaryCaregiver",
+    label: "Secondary Caregiver Phone",
+    prompt:
+      "Do you have a secondary caregiver? If yes, provide their phone number. If not, skip.",
+    placeholder: "Secondary caregiver phone (optional)",
+    type: "tel",
+    inputType: "tel",
+    optional: true,
+    skipPrompt: "Skipping secondary caregiver.",
   },
 ];
 
@@ -130,105 +129,84 @@ export function Register() {
   const { setProfile } = useAppContext();
 
   const [step, setStep] = useState(0);
-  const [values, setValues] = useState<Record<string, string>>({
-    language: "en",
-  });
+  const [values, setValues] = useState<Record<string, string>>({});
   const inputRef = useRef<HTMLInputElement>(null);
 
   const currentStep = STEPS[step];
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: speak on step change
   useEffect(() => {
-    speak(currentStep.prompt);
+    const prompt = currentStep.optional
+      ? `${currentStep.prompt} This step is optional. You can tap Skip to continue.`
+      : currentStep.prompt;
+    speak(prompt);
     setTimeout(() => inputRef.current?.focus(), 300);
   }, [step]);
 
   const handleVoiceInput = () => {
     speak(currentStep.prompt);
     listen((text) => {
-      if (currentStep.type === "dual" && currentStep.subFields) {
-        setValues((prev) => ({
-          ...prev,
-          [currentStep.subFields![0].key]: text,
-        }));
-      } else {
-        setValues((prev) => ({ ...prev, [currentStep.key]: text }));
-      }
+      setValues((prev) => ({ ...prev, [currentStep.key]: text }));
     });
   };
 
   const handleSkip = () => {
     if (currentStep.skipPrompt) speak(currentStep.skipPrompt);
-    // Clear any partial values for skipped step
-    if (currentStep.subFields) {
-      setValues((prev) => {
-        const next = { ...prev };
-        for (const sf of currentStep.subFields!) {
-          delete next[sf.key];
-        }
-        return next;
-      });
-    }
-    if (step < STEPS.length - 1) {
-      setStep((s) => s + 1);
-    } else {
-      handleSave();
-    }
+    setValues((prev) => {
+      const n = { ...prev };
+      delete n[currentStep.key];
+      return n;
+    });
+    if (step < STEPS.length - 1) setStep((s) => s + 1);
+    else handleSave();
   };
 
   const handleNext = () => {
-    if (currentStep.type === "dual" && currentStep.subFields) {
-      const allFilled = currentStep.subFields.every((sf) =>
-        values[sf.key]?.trim(),
-      );
-      if (!allFilled && !currentStep.optional) {
-        speak("Please fill in both fields before continuing.");
-        toast.error("Please fill in both fields");
-        return;
-      }
-      // If optional and partially filled, warn
-      if (!allFilled && currentStep.optional) {
-        speak("Please fill in both fields or skip this step.");
-        toast.error("Fill both fields or tap Skip");
-        return;
-      }
-    } else {
-      const val = values[currentStep.key];
-      if (!val?.trim()) {
-        speak("Please provide an answer before continuing.");
-        toast.error("Please fill in this field");
-        return;
-      }
+    const val = values[currentStep.key]?.trim();
+    if (!val && !currentStep.optional) {
+      speak("Please provide an answer before continuing.");
+      toast.error("Please fill in this field");
+      return;
     }
-
-    if (step < STEPS.length - 1) {
-      setStep((s) => s + 1);
-    } else {
-      handleSave();
-    }
+    if (step < STEPS.length - 1) setStep((s) => s + 1);
+    else handleSave();
   };
 
   const handleSave = async () => {
     try {
       speak("Saving your profile. Please wait.");
-      const profileData = {
-        name: values.name || "",
-        age: BigInt(Number.parseInt(values.age || "0", 10)),
-        preferredLanguage: values.language || "en",
-        doctor: {
-          name: values.doctorName || "",
-          phone: values.doctorPhone || "",
-        },
-        caregiver: {
-          name: values.caregiverName || "",
-          phone: values.caregiverPhone || "",
-        },
+      const conditions = (values.conditions || "")
+        .split(",")
+        .map((s) => s.trim())
+        .filter(Boolean);
+      const age = BigInt(Math.max(1, Number.parseInt(values.age || "25", 10)));
+      const weight = BigInt(
+        Math.max(1, Number.parseInt(values.weight || "60", 10)),
+      );
+      const data = {
+        name: values.name || "User",
+        age,
+        weight,
+        bloodGroup: values.bloodGroup || "O+",
+        preferredLanguage: values.language || "English",
+        medicalConditions: conditions,
+        doctorContact: values.doctorContact?.trim() || null,
+        primaryCaregiverContact: values.primaryCaregiver || "",
+        secondaryCaregiverContact: values.secondaryCaregiver?.trim() || null,
       };
-      await saveProfile.mutateAsync(profileData);
+      await saveProfile.mutateAsync(data);
       setProfile({
-        ...profileData,
+        name: data.name,
+        age: data.age,
+        weight: data.weight,
+        bloodGroup: data.bloodGroup,
+        preferredLanguage: data.preferredLanguage,
+        medicalConditions: data.medicalConditions,
+        doctorContact: data.doctorContact ?? undefined,
+        primaryCaregiverContact: data.primaryCaregiverContact,
+        secondaryCaregiverContact: data.secondaryCaregiverContact ?? undefined,
+        registrationComplete: true,
         principal: null as any,
-        age: profileData.age,
       });
       speak("Profile saved successfully. Welcome to MEDSAARTHI.");
       toast.success("Profile saved!");
@@ -242,7 +220,7 @@ export function Register() {
   const progressPct = ((step + 1) / STEPS.length) * 100;
 
   return (
-    <div className="app-shell min-h-dvh flex flex-col px-6 py-8">
+    <div className="min-h-dvh flex flex-col px-6 py-8 bg-background">
       <div className="mb-8">
         <div className="flex items-center justify-between mb-3">
           <span className="text-muted-foreground text-base">
@@ -277,7 +255,7 @@ export function Register() {
                 {currentStep.label}
               </h2>
               {currentStep.optional && (
-                <span className="text-sm font-medium px-2 py-0.5 rounded-full bg-muted text-muted-foreground">
+                <span className="text-sm font-medium px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-400">
                   Optional
                 </span>
               )}
@@ -287,75 +265,26 @@ export function Register() {
             </p>
           </div>
 
-          {currentStep.type === "select" ? (
-            <div className="space-y-2">
-              <Label className="text-lg font-semibold">Select Language</Label>
-              <Select
-                value={values.language}
-                onValueChange={(v) =>
-                  setValues((prev) => ({ ...prev, language: v }))
-                }
-              >
-                <SelectTrigger
-                  className="h-16 text-lg"
-                  aria-label="Select preferred language"
-                  data-ocid="register.select"
+          {currentStep.type === "buttons" ? (
+            <div className="flex flex-wrap gap-3">
+              {currentStep.options?.map((opt) => (
+                <button
+                  key={opt}
+                  type="button"
+                  onClick={() =>
+                    setValues((prev) => ({ ...prev, [currentStep.key]: opt }))
+                  }
+                  className={`px-6 py-4 rounded-xl text-lg font-bold border-2 transition-colors ${
+                    values[currentStep.key] === opt
+                      ? "bg-primary text-primary-foreground border-primary"
+                      : "bg-card text-foreground border-border hover:border-primary"
+                  }`}
+                  aria-pressed={values[currentStep.key] === opt}
+                  data-ocid="register.toggle"
                 >
-                  <SelectValue placeholder="Choose language" />
-                </SelectTrigger>
-                <SelectContent>
-                  {LANGUAGES.map((lang) => (
-                    <SelectItem
-                      key={lang.value}
-                      value={lang.value}
-                      className="text-lg py-3"
-                    >
-                      {lang.label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-          ) : currentStep.type === "dual" && currentStep.subFields ? (
-            <div className="space-y-4">
-              {currentStep.subFields.map((sf) => (
-                <div key={sf.key} className="space-y-2">
-                  <Label className="text-lg font-semibold">{sf.label}</Label>
-                  <Input
-                    type={sf.type}
-                    placeholder={sf.placeholder}
-                    value={values[sf.key] || ""}
-                    onChange={(e) =>
-                      setValues((prev) => ({
-                        ...prev,
-                        [sf.key]: e.target.value,
-                      }))
-                    }
-                    className="h-16 text-xl px-4 bg-input border-border"
-                    aria-label={sf.label}
-                    data-ocid="register.input"
-                  />
-                </div>
+                  {opt}
+                </button>
               ))}
-              <Button
-                variant="outline"
-                onClick={handleVoiceInput}
-                className="w-full h-14 rounded-xl mt-2"
-                aria-label={
-                  isListening ? "Stop listening" : "Start voice input"
-                }
-              >
-                {isListening ? (
-                  <>
-                    <MicOff className="w-6 h-6 text-destructive mr-2" /> Stop
-                    Listening
-                  </>
-                ) : (
-                  <>
-                    <Mic className="w-6 h-6 text-primary mr-2" /> Voice Input
-                  </>
-                )}
-              </Button>
             </div>
           ) : (
             <div className="space-y-2">
@@ -365,7 +294,7 @@ export function Register() {
               <div className="flex gap-3">
                 <Input
                   ref={inputRef}
-                  type={currentStep.type}
+                  type={currentStep.inputType || "text"}
                   placeholder={currentStep.placeholder}
                   value={values[currentStep.key] || ""}
                   onChange={(e) =>
@@ -374,7 +303,7 @@ export function Register() {
                       [currentStep.key]: e.target.value,
                     }))
                   }
-                  className="flex-1 h-16 text-xl px-4 bg-input border-border"
+                  className="flex-1 h-16 text-xl px-4"
                   aria-label={currentStep.label}
                   data-ocid="register.input"
                   onKeyDown={(e) => e.key === "Enter" && handleNext()}
@@ -383,9 +312,8 @@ export function Register() {
                   variant="outline"
                   onClick={handleVoiceInput}
                   className="w-16 h-16 rounded-xl flex-shrink-0"
-                  aria-label={
-                    isListening ? "Stop listening" : "Start voice input"
-                  }
+                  aria-label={isListening ? "Stop listening" : "Voice input"}
+                  data-ocid="register.toggle"
                 >
                   {isListening ? (
                     <MicOff className="w-6 h-6 text-destructive" />
@@ -414,18 +342,17 @@ export function Register() {
             <Button
               variant="outline"
               onClick={() => setStep((s) => s - 1)}
-              className="flex-1 btn-large"
-              aria-label="Go to previous step"
+              className="flex-1 h-16 rounded-xl text-lg"
+              aria-label="Previous step"
               data-ocid="register.secondary_button"
             >
-              <ChevronLeft className="w-5 h-5 mr-2" />
-              Back
+              <ChevronLeft className="w-5 h-5 mr-2" /> Back
             </Button>
           )}
           <Button
             onClick={handleNext}
             disabled={saveProfile.isPending}
-            className="flex-1 btn-large bg-primary text-primary-foreground hover:bg-primary/90"
+            className="flex-1 h-16 rounded-xl text-lg bg-primary text-primary-foreground font-bold"
             aria-label={
               step === STEPS.length - 1 ? "Save profile" : "Next step"
             }
@@ -433,27 +360,24 @@ export function Register() {
           >
             {step === STEPS.length - 1 ? (
               <>
-                <Check className="w-5 h-5 mr-2" />
-                Save Profile
+                <Check className="w-5 h-5 mr-2" /> Save Profile
               </>
             ) : (
               <>
-                Next
-                <ChevronRight className="w-5 h-5 ml-2" />
+                Next <ChevronRight className="w-5 h-5 ml-2" />
               </>
             )}
           </Button>
         </div>
         {currentStep.optional && (
           <Button
-            variant="ghost"
+            variant="outline"
             onClick={handleSkip}
-            className="w-full h-14 rounded-xl text-muted-foreground text-lg border border-dashed border-muted-foreground/40 hover:text-foreground"
+            className="w-full h-16 rounded-xl text-lg font-bold bg-amber-500/10 border-2 border-amber-500 text-amber-400 hover:bg-amber-500/20 hover:text-amber-300"
             aria-label="Skip this optional step"
             data-ocid="register.cancel_button"
           >
-            <SkipForward className="w-5 h-5 mr-2" />I don't have a personal
-            doctor — Skip
+            <SkipForward className="w-6 h-6 mr-2" /> Skip This Step (Optional)
           </Button>
         )}
       </div>

@@ -5,17 +5,9 @@ import { useAppContext } from "@/context/AppContext";
 import { useProfile } from "@/hooks/useQueries";
 import { useVoice } from "@/hooks/useVoice";
 import { useNavigate } from "@tanstack/react-router";
-import { Edit3, Globe, Stethoscope, User, Users } from "lucide-react";
+import { Edit3, Globe, Heart, User, Users } from "lucide-react";
 import { motion } from "motion/react";
 import { useEffect } from "react";
-
-const LANG_LABELS: Record<string, string> = {
-  en: "English",
-  hi: "Hindi",
-  ta: "Tamil",
-  bn: "Bengali",
-  te: "Telugu",
-};
 
 export function Profile() {
   const navigate = useNavigate();
@@ -23,14 +15,13 @@ export function Profile() {
   const { data: profile, isLoading } = useProfile();
   const { setProfile } = useAppContext();
 
-  // biome-ignore lint/correctness/useExhaustiveDependencies: speak on profile load
+  // biome-ignore lint/correctness/useExhaustiveDependencies: speak on load
   useEffect(() => {
-    if (profile?.name) {
+    if (profile?.name)
       speak(`Profile page. Viewing details for ${profile.name}.`);
-    }
   }, [profile?.name]);
 
-  // biome-ignore lint/correctness/useExhaustiveDependencies: sync profile to context
+  // biome-ignore lint/correctness/useExhaustiveDependencies: sync context
   useEffect(() => {
     if (profile) setProfile(profile);
   }, [profile]);
@@ -39,21 +30,28 @@ export function Profile() {
     ? [
         { icon: User, label: "Name", value: profile.name },
         { icon: User, label: "Age", value: `${String(profile.age)} years` },
+        { icon: User, label: "Weight", value: `${String(profile.weight)} kg` },
+        { icon: Heart, label: "Blood Group", value: profile.bloodGroup },
+        { icon: Globe, label: "Language", value: profile.preferredLanguage },
         {
-          icon: Globe,
-          label: "Language",
-          value:
-            LANG_LABELS[profile.preferredLanguage] || profile.preferredLanguage,
+          icon: User,
+          label: "Conditions",
+          value: profile.medicalConditions.join(", ") || "None",
         },
         {
-          icon: Stethoscope,
-          label: "Doctor",
-          value: `${profile.doctor?.name} — ${profile.doctor?.phone}`,
+          icon: User,
+          label: "Doctor Contact",
+          value: profile.doctorContact || "Not provided",
         },
         {
           icon: Users,
-          label: "Caregiver",
-          value: `${profile.caregiver?.name} — ${profile.caregiver?.phone}`,
+          label: "Primary Caregiver",
+          value: profile.primaryCaregiverContact || "Not provided",
+        },
+        {
+          icon: Users,
+          label: "Secondary Caregiver",
+          value: profile.secondaryCaregiverContact || "Not provided",
         },
       ]
     : [];
@@ -85,7 +83,6 @@ export function Profile() {
             <Button
               onClick={() => navigate({ to: "/register" })}
               className="btn-large bg-primary text-primary-foreground w-full"
-              aria-label="Set up your profile"
             >
               Set Up Profile
             </Button>
@@ -126,8 +123,8 @@ export function Profile() {
 
             <Button
               onClick={() => navigate({ to: "/register" })}
-              className="w-full btn-large bg-primary/15 text-primary border border-primary/30 hover:bg-primary/25 mt-6"
-              aria-label="Edit your profile"
+              className="w-full h-14 rounded-xl bg-primary/15 text-primary border border-primary/30 hover:bg-primary/25 mt-6"
+              aria-label="Edit profile"
               data-ocid="profile.edit_button"
             >
               <Edit3 className="w-5 h-5 mr-2" /> Edit Profile

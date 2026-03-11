@@ -1,4 +1,4 @@
-import type { Profile } from "@/backend";
+import type { UserProfile } from "@/backend";
 import {
   type ReactNode,
   createContext,
@@ -8,8 +8,8 @@ import {
 } from "react";
 
 interface AppContextValue {
-  profile: Profile | null;
-  setProfile: (p: Profile | null) => void;
+  profile: UserProfile | null;
+  setProfile: (p: UserProfile | null) => void;
   emergencyOpen: boolean;
   openEmergency: () => void;
   closeEmergency: () => void;
@@ -18,7 +18,7 @@ interface AppContextValue {
 const AppContext = createContext<AppContextValue | null>(null);
 
 export function AppProvider({ children }: { children: ReactNode }) {
-  const [profile, setProfile] = useState<Profile | null>(null);
+  const [profile, setProfile] = useState<UserProfile | null>(null);
   const [emergencyOpen, setEmergencyOpen] = useState(false);
 
   const openEmergency = useCallback(() => setEmergencyOpen(true), []);

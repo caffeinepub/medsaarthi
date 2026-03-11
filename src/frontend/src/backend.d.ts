@@ -7,69 +7,57 @@ export interface None {
     __kind__: "None";
 }
 export type Option<T> = Some<T> | None;
+export type PhoneNumber = string;
 export type Time = bigint;
-export type MedicationId = bigint;
-export interface Contact {
-    name: string;
-    phone: Phone;
-}
-export type AlertId = bigint;
-export type Phone = string;
-export interface HealthCheckIn {
-    mood: Mood;
+export interface HealthCheckinResponse {
+    date: string;
+    questionsAndAnswers: Array<{
+        question: string;
+        answer: string;
+    }>;
+    session: string;
     timestamp: Time;
-    sideEffects: string;
-    symptoms: string;
 }
-export interface Profile {
+export type MedicineId = bigint;
+export interface Medicine {
+    id: MedicineId;
+    dosage: string;
+    source: string;
+    name: string;
+    time: string;
+    addedAt: Time;
+}
+export interface AdherenceLog {
+    takenAt: Time;
+    confirmed: boolean;
+    medicineId: MedicineId;
+}
+export interface UserProfile {
     age: bigint;
+    weight: bigint;
     principal: Principal;
     preferredLanguage: string;
-    doctor: Contact;
     name: string;
-    caregiver: Contact;
-}
-export interface DoseLog {
-    medicationId: MedicationId;
-    timestamp: Time;
-    confirmedByVoice: boolean;
-}
-export interface Medication {
-    id: MedicationId;
-    dosage: string;
-    name: string;
-    notes: string;
-    scheduledTimes: Array<string>;
-    frequency: bigint;
-}
-export interface Alert {
-    id: AlertId;
-    alertType: AlertType;
-    acknowledged: boolean;
-    message: string;
-    timestamp: Time;
-}
-export enum AlertType {
-    emergency = "emergency",
-    missedDose = "missedDose",
-    healthUpdate = "healthUpdate"
-}
-export enum Mood {
-    fair = "fair",
-    good = "good",
-    poor = "poor"
+    medicalConditions: Array<string>;
+    doctorContact?: PhoneNumber;
+    bloodGroup: string;
+    primaryCaregiverContact: PhoneNumber;
+    registrationComplete: boolean;
+    secondaryCaregiverContact?: PhoneNumber;
 }
 export interface backendInterface {
-    acknowledgeAlert(alertId: AlertId): Promise<void>;
-    addMedication(name: string, dosage: string, frequency: bigint, scheduledTimes: Array<string>, notes: string): Promise<void>;
-    createAlert(alertType: AlertType, message: string, timestamp: Time): Promise<void>;
-    createOrUpdateProfile(name: string, age: bigint, preferredLanguage: string, doctor: Contact, caregiver: Contact): Promise<void>;
-    deleteMedication(medicationId: MedicationId): Promise<void>;
-    getDoseLogsForToday(): Promise<Array<DoseLog>>;
-    getProfile(): Promise<Profile>;
-    listAlerts(): Promise<Array<Alert>>;
-    listMedications(): Promise<Array<Medication>>;
-    listRecentCheckIns(): Promise<Array<HealthCheckIn>>;
-    logDose(medicationId: MedicationId, timestamp: Time, confirmedByVoice: boolean): Promise<void>;
-    submitCheckIn(symptoms: string, sideEffects: string, mood: Mood, timestamp: Time): Promise<void>;
+    addMedicine(name: string, dosage: string, time: string, source: string): Promise<MedicineId>;
+    createEmergencyAlert(note: string): Promise<void>;
+    deleteMedicine(medicineId: MedicineId): Promise<void>;
+    getHealthCheckinsByDate(date: string): Promise<HealthCheckinResponse | null>;
+    getMedicinesByTime(timeOfDay: string): Promise<Array<Medicine>>;
+    getMissedDoses(): Promise<Array<Medicine>>;
+    getTodaysAdherence(): Promise<Array<AdherenceLog>>;
+    getUserProfile(): Promise<UserProfile | null>;
+    logAdherence(medicineId: MedicineId, confirmed: boolean): Promise<void>;
+    submitHealthCheckin(session: string, date: string, questionsAndAnswers: Array<{
+        question: string;
+        answer: string;
+    }>): Promise<void>;
+    updateUserProfile(name: string, age: bigint, weight: bigint, bloodGroup: string, preferredLanguage: string, medicalConditions: Array<string>, doctorContact: PhoneNumber | null, primaryCaregiverContact: PhoneNumber, secondaryCaregiverContact: PhoneNumber | null, registrationComplete: boolean): Promise<void>;
 }

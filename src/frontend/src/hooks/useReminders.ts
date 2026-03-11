@@ -1,41 +1,41 @@
-import type { Medication } from "@/backend";
+import type { Medicine } from "@/backend";
 import { useCallback, useEffect, useRef } from "react";
 import { useVoice } from "./useVoice";
 
-type ReminderCallback = (med: Medication, time: string) => void;
+type ReminderCallback = (med: Medicine) => void;
+
+function getCurrentTimeOfDay(): "Morning" | "Afternoon" | "Night" | null {
+  const h = new Date().getHours();
+  if (h >= 6 && h < 12) return "Morning";
+  if (h >= 12 && h < 18) return "Afternoon";
+  if (h >= 18 && h < 23) return "Night";
+  return null;
+}
 
 export function useReminders(
-  medications: Medication[],
+  medicines: Medicine[],
   onReminder?: ReminderCallback,
 ) {
   const { speak } = useVoice();
-  const remindersSentRef = useRef<Set<string>>(new Set());
+  const sentRef = useRef<Set<string>>(new Set());
 
   const checkReminders = useCallback(() => {
+    const tod = getCurrentTimeOfDay();
+    if (!tod) return;
     const now = new Date();
-    const hh = String(now.getHours()).padStart(2, "0");
-    const mm = String(now.getMinutes()).padStart(2, "0");
-    const currentTime = `${hh}:${mm}`;
+    const minuteKey = `${now.getHours()}:${Math.floor(now.getMinutes() / 5)}`;
 
-    for (const med of medications) {
-      for (const scheduledTime of med.scheduledTimes) {
-        const key = `${med.id}-${scheduledTime}-${currentTime.slice(0, 4)}`;
-        if (remindersSentRef.current.has(key)) continue;
-
-        const [sHH, sMM] = scheduledTime.split(":").map(Number);
-        const nowMins = now.getHours() * 60 + now.getMinutes();
-        const schedMins = sHH * 60 + sMM;
-        const diff = Math.abs(nowMins - schedMins);
-
-        if (diff <= 1) {
-          remindersSentRef.current.add(key);
-          const msg = `Time to take your medicine: ${med.name}, ${med.dosage}.`;
-          speak(msg);
-          onReminder?.(med, scheduledTime);
-        }
+    for (const med of medicines) {
+      if (med.time === tod) {
+        const key = `${String(med.id)}-${tod}-${minuteKey}`;
+        if (sentRef.current.has(key)) continue;
+        sentRef.current.add(key);
+        const msg = `It is time to take your medicine: ${med.name}, ${med.dosage}.`;
+        speak(msg);
+        onReminder?.(med);
       }
     }
-  }, [medications, speak, onReminder]);
+  }, [medicines, speak, onReminder]);
 
   useEffect(() => {
     checkReminders();
