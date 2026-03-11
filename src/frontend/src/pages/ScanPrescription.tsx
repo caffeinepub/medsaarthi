@@ -2,6 +2,8 @@ import { useCamera } from "@/camera/useCamera";
 import { Layout } from "@/components/Layout";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { useAddMedicine } from "@/hooks/useQueries";
 import { useVoice } from "@/hooks/useVoice";
 import { useNavigate } from "@tanstack/react-router";
@@ -9,19 +11,22 @@ import {
   ArrowLeft,
   Camera,
   CheckCircle,
-  Clock,
   Pill,
   Plus,
+  Trash2,
 } from "lucide-react";
 import { AnimatePresence, motion } from "motion/react";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
 
-const MOCK_MEDICINES = [
-  { name: "Paracetamol", dosage: "500mg", time: "Morning" },
-  { name: "Paracetamol", dosage: "500mg", time: "Night" },
-  { name: "Metformin", dosage: "500mg", time: "Morning" },
-];
+const TIME_OPTIONS = ["Morning", "Afternoon", "Night"];
+
+interface MedEntry {
+  id: number;
+  name: string;
+  dosage: string;
+  time: string;
+}
 
 export function ScanPrescription() {
   const navigate = useNavigate();
@@ -39,11 +44,14 @@ export function ScanPrescription() {
   const [captured, setCaptured] = useState(false);
   const [adding, setAdding] = useState(false);
   const [added, setAdded] = useState(false);
+  const [medicines, setMedicines] = useState<MedEntry[]>([
+    { id: Date.now(), name: "", dosage: "", time: "Morning" },
+  ]);
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: run once
   useEffect(() => {
     speak(
-      "Scan Prescription. Point your camera at the prescription and tap Scan.",
+      "Scan Prescription. Point your camera at the prescription and tap Scan. Then enter the medicine names you see.",
     );
     startCamera();
     return () => {
@@ -55,29 +63,54 @@ export function ScanPrescription() {
     await capturePhoto();
     setCaptured(true);
     speak(
-      "Medicine: Paracetamol 500mg, Morning and Night. Medicine: Metformin 500mg, Morning.",
+      "Photo captured. Please read the prescription and enter the medicine names and dosage below.",
     );
   };
 
-  const handleAddAll = async () => {
+  const handleAddRow = () => {
+    setMedicines((prev) => [
+      ...prev,
+      { id: Date.now(), name: "", dosage: "", time: "Morning" },
+    ]);
+  };
+
+  const handleRemoveRow = (idx: number) => {
+    setMedicines((prev) => prev.filter((_, i) => i !== idx));
+  };
+
+  const handleChange = (idx: number, field: keyof MedEntry, value: string) => {
+    setMedicines((prev) =>
+      prev.map((m, i) => (i === idx ? { ...m, [field]: value } : m)),
+    );
+  };
+
+  const handleSaveAll = async () => {
+    const valid = medicines.filter((m) => m.name.trim());
+    if (valid.length === 0) {
+      toast.error("Please enter at least one medicine name");
+      speak("Please enter at least one medicine name.");
+      return;
+    }
     setAdding(true);
     try {
       await Promise.all(
-        MOCK_MEDICINES.map((m) =>
+        valid.map((m) =>
           addMed.mutateAsync({
-            name: m.name,
-            dosage: m.dosage,
+            name: m.name.trim(),
+            dosage: m.dosage.trim(),
             time: m.time,
             source: "scan",
           }),
         ),
       );
       setAdded(true);
-      speak("All medicines added. Paracetamol and Metformin have been saved.");
-      toast.success("Medicines added!");
+      speak(
+        `${valid.length} medicine${valid.length > 1 ? "s" : ""} saved: ${valid.map((m) => m.name).join(", ")}.`,
+      );
+      toast.success("Medicines saved!");
       setTimeout(() => navigate({ to: "/medicines" }), 1500);
     } catch {
-      toast.error("Failed to add medicines");
+      toast.error("Failed to save medicines");
     } finally {
       setAdding(false);
     }
@@ -143,55 +176,115 @@ export function ScanPrescription() {
             </motion.div>
           ) : (
             <motion.div
-              key="results"
+              key="entry"
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
+              className="space-y-4 pb-12"
             >
-              <div className="p-4 bg-green-500/10 border border-green-500/30 rounded-2xl mb-6 flex items-center gap-3">
-                <CheckCircle className="w-6 h-6 text-green-500" />
-                <p className="text-green-500 text-lg font-semibold">
-                  {MOCK_MEDICINES.length} medicines found in prescription
+              <div className="p-4 bg-primary/10 border border-primary/30 rounded-2xl flex items-center gap-3">
+                <CheckCircle className="w-6 h-6 text-primary shrink-0" />
+                <p className="text-primary text-base font-semibold">
+                  Photo captured. Read the prescription and enter each medicine
+                  below.
                 </p>
               </div>
-              <div className="space-y-4 mb-8">
-                {MOCK_MEDICINES.map((med, idx) => (
-                  <Card
-                    key={`${med.name}-${med.time}`}
-                    className="border-border"
-                    data-ocid={`scan.item.${idx + 1}`}
-                  >
-                    <CardContent className="p-5">
-                      <div className="flex items-start gap-3">
-                        <Pill className="w-6 h-6 text-primary mt-1" />
-                        <div>
-                          <p className="text-xl font-black">
-                            Medicine: {med.name}
-                          </p>
-                          <p className="text-lg text-muted-foreground">
-                            Dosage: {med.dosage}
-                          </p>
-                          <div className="flex items-center gap-2 mt-1">
-                            <Clock className="w-4 h-4 text-muted-foreground" />
-                            <p className="text-base font-semibold">
-                              Time: {med.time}
-                            </p>
-                          </div>
-                        </div>
+
+              {medicines.map((med, idx) => (
+                <Card
+                  key={med.id}
+                  className="border-border"
+                  data-ocid={`scan.item.${idx + 1}`}
+                >
+                  <CardContent className="p-5 space-y-4">
+                    <div className="flex items-center justify-between mb-1">
+                      <div className="flex items-center gap-2">
+                        <Pill className="w-5 h-5 text-primary" />
+                        <span className="font-bold text-base">
+                          Medicine {idx + 1}
+                        </span>
                       </div>
-                    </CardContent>
-                  </Card>
-                ))}
-              </div>
+                      {medicines.length > 1 && (
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          onClick={() => handleRemoveRow(idx)}
+                          className="text-destructive hover:bg-destructive/10"
+                          aria-label="Remove medicine"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </Button>
+                      )}
+                    </div>
+                    <div className="space-y-1">
+                      <Label className="text-sm font-semibold">
+                        Medicine Name *
+                      </Label>
+                      <Input
+                        value={med.name}
+                        onChange={(e) =>
+                          handleChange(idx, "name", e.target.value)
+                        }
+                        placeholder="e.g. Paracetamol"
+                        className="h-12 text-base"
+                        data-ocid="scan.input"
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <Label className="text-sm font-semibold">Dosage</Label>
+                      <Input
+                        value={med.dosage}
+                        onChange={(e) =>
+                          handleChange(idx, "dosage", e.target.value)
+                        }
+                        placeholder="e.g. 500mg"
+                        className="h-12 text-base"
+                        data-ocid="scan.input"
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <Label className="text-sm font-semibold">
+                        Time of Day
+                      </Label>
+                      <div className="flex gap-2">
+                        {TIME_OPTIONS.map((t) => (
+                          <button
+                            key={t}
+                            type="button"
+                            onClick={() => handleChange(idx, "time", t)}
+                            className={`flex-1 py-3 rounded-xl text-sm font-bold border-2 transition-colors ${
+                              med.time === t
+                                ? "bg-primary text-primary-foreground border-primary"
+                                : "bg-card text-foreground border-border"
+                            }`}
+                          >
+                            {t}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+              ))}
+
+              <Button
+                variant="outline"
+                onClick={handleAddRow}
+                className="w-full h-14 rounded-xl text-base font-semibold border-dashed"
+                data-ocid="scan.secondary_button"
+              >
+                <Plus className="w-5 h-5 mr-2" /> Add Another Medicine
+              </Button>
+
               {!added ? (
                 <Button
-                  onClick={handleAddAll}
+                  onClick={handleSaveAll}
                   disabled={adding}
                   className="w-full h-16 rounded-xl text-xl font-bold bg-primary text-primary-foreground"
-                  aria-label="Add all medicines"
+                  aria-label="Save all medicines"
                   data-ocid="scan.primary_button"
                 >
-                  <Plus className="w-6 h-6 mr-3" />{" "}
-                  {adding ? "Adding..." : "Add All to My Medicines"}
+                  <CheckCircle className="w-6 h-6 mr-3" />{" "}
+                  {adding ? "Saving..." : "Save to My Medicines"}
                 </Button>
               ) : (
                 <div
